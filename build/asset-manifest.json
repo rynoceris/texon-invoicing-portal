@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/texon-invoicing-portal/static/css/main.cddeea53.css",
+    "main.js": "/texon-invoicing-portal/static/js/main.f332ec1a.js",
+    "index.html": "/texon-invoicing-portal/index.html",
+    "main.cddeea53.css.map": "/texon-invoicing-portal/static/css/main.cddeea53.css.map",
+    "main.f332ec1a.js.map": "/texon-invoicing-portal/static/js/main.f332ec1a.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.cddeea53.css",
+    "static/js/main.f332ec1a.js"
+  ]
+}
