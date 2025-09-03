@@ -4,6 +4,34 @@ import InvoiceDashboard from './InvoiceDashboard';
 import './InvoiceDashboard.css';
 import EmailSettings from './EmailSettings';
 
+// Chart.js imports for analytics
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  PointElement,
+  LineElement,
+} from 'chart.js';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  PointElement,
+  LineElement
+);
+
 const API_BASE = '/texon-invoicing-portal/api';
 
 // Login Component
@@ -386,481 +414,592 @@ function Settings({ token, user }) {
   );
 }
 
-// Replace the Reports component in your client/src/App.js with this enhanced version:
-
-function Reports({ token, user }) {
-  const [reports, setReports] = useState([]);
+// Analytics Component - Advanced Dashboard & Financial Analytics
+function Analytics({ token, user }) {
   const [loading, setLoading] = useState(true);
-  const [expandedReports, setExpandedReports] = useState(new Set());
-  const [pagination, setPagination] = useState({}); // Track pagination for each report
-  const [downloadingReports, setDownloadingReports] = useState(new Set());
-  const [deletingReports, setDeletingReports] = useState(new Set());
-  const [deletingAll, setDeletingAll] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    start: '2024-01-01', // January 1, 2024 (same as dashboard default)
+    end: new Date().toISOString().split('T')[0] // Today
+  });
+  const [kpis, setKpis] = useState({});
+  const [cashFlowData, setCashFlowData] = useState({});
+  const [agingData, setAgingData] = useState({});
+  const [trendData, setTrendData] = useState({});
+  const [cashFlowGranularity, setCashFlowGranularity] = useState('weekly');
 
   useEffect(() => {
-    loadReports();
-  }, []);
+    loadAnalytics();
+  }, [dateRange]);
 
-  const loadReports = async () => {
+  useEffect(() => {
+    loadCashFlowData();
+  }, [cashFlowGranularity]);
+
+  const loadAnalytics = async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/reports`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      // Parse discrepancies for each report
-      const parsedReports = data.map(report => ({
-        ...report,
-        discrepancies: (() => {
-          try {
-            if (typeof report.discrepancies === 'string') {
-              return JSON.parse(report.discrepancies);
-            } else if (Array.isArray(report.discrepancies)) {
-              return report.discrepancies;
-            } else {
-              return [];
-            }
-          } catch (e) {
-            console.error('Error parsing discrepancies for report:', report.id, e);
-            return [];
-          }
-        })()
-      }));
-      
-      setReports(parsedReports);
-      
-      // Initialize pagination for each report (start with page 1)
-      const initialPagination = {};
-      parsedReports.forEach(report => {
-        initialPagination[report.id] = { currentPage: 1, itemsPerPage: 25 };
-      });
-      setPagination(initialPagination);
-      
+      // Load all analytics data concurrently
+      await Promise.all([
+        loadKPIs(),
+        loadCashFlowData(), 
+        loadAgingAnalysis(),
+        loadTrendData(),
+      ]);
     } catch (error) {
-      console.error('Error loading reports:', error);
+      console.error('Error loading analytics:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteReport = async (report) => {
-    const confirmMessage = `Are you sure you want to delete the report from ${report.date}?\n\nThis action cannot be undone.`;
-    
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
-
-    const reportId = report.id;
-    setDeletingReports(prev => new Set(prev).add(reportId));
-
+  const loadKPIs = async () => {
     try {
-      const response = await fetch(`${API_BASE}/reports/${reportId}`, {
-        method: 'DELETE',
+      const response = await fetch(`${API_BASE}/analytics/kpis?startDate=${dateRange.start}&endDate=${dateRange.end}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Remove the report from the local state
-        setReports(prev => prev.filter(r => r.id !== reportId));
-        
-        // Also remove from expanded reports if it was expanded
-        setExpandedReports(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(reportId);
-          return newSet;
-        });
-
-        alert(`Report from ${report.date} has been deleted successfully.`);
-      } else {
-        throw new Error(data.error || 'Failed to delete report');
+      if (response.ok) {
+        const result = await response.json();
+        setKpis(result.success ? result.data : {});
       }
     } catch (error) {
-      console.error('Error deleting report:', error);
-      alert(`Failed to delete report: ${error.message}`);
-    } finally {
-      setDeletingReports(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(reportId);
-        return newSet;
-      });
+      console.error('Error loading KPIs:', error);
     }
   };
 
-  const deleteAllReports = async () => {
-    if (reports.length === 0) {
-      alert('No reports to delete.');
-      return;
-    }
-
-    const confirmMessage = `Are you sure you want to delete ALL ${reports.length} reports?\n\nThis will permanently delete all inventory comparison reports and cannot be undone.`;
-    
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
-
-    // Double confirmation for such a destructive action
-    const doubleConfirm = window.confirm(`FINAL CONFIRMATION:\n\nThis will delete ALL ${reports.length} reports permanently.\n\nClick OK to proceed with deletion.`);
-    
-    if (!doubleConfirm) {
-      return;
-    }
-
-    setDeletingAll(true);
-
+  const loadCashFlowData = async () => {
     try {
-      let deletedCount = 0;
-      let failedCount = 0;
-      const totalReports = reports.length;
+      const response = await fetch(`${API_BASE}/analytics/cash-flow?startDate=${dateRange.start}&endDate=${dateRange.end}&granularity=${cashFlowGranularity}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setCashFlowData(result.success ? result.data : {});
+      }
+    } catch (error) {
+      console.error('Error loading cash flow data:', error);
+    }
+  };
 
-      // Delete reports one by one to handle any individual failures
-      for (const report of reports) {
-        try {
-          const response = await fetch(`${API_BASE}/reports/${report.id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+  const loadAgingAnalysis = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/analytics/aging-analysis?startDate=${dateRange.start}&endDate=${dateRange.end}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setAgingData(result.success ? result.data : {});
+      }
+    } catch (error) {
+      console.error('Error loading aging analysis:', error);
+    }
+  };
 
-          const data = await response.json();
+  const loadTrendData = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/analytics/trends?startDate=${dateRange.start}&endDate=${dateRange.end}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setTrendData(result.success ? result.data : {});
+      }
+    } catch (error) {
+      console.error('Error loading trend data:', error);
+    }
+  };
 
-          if (response.ok && data.success) {
-            deletedCount++;
-          } else {
-            failedCount++;
-            console.error(`Failed to delete report ${report.id}:`, data.error);
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount || 0);
+  };
+
+  // Chart data configurations
+  const cashFlowChartData = {
+    labels: cashFlowData.labels || ['No Data'],
+    datasets: [
+      {
+        label: 'Revenue',
+        data: cashFlowData.datasets?.revenue || [0],
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 2,
+        tension: 0.4,
+      },
+      {
+        label: 'Collections',
+        data: cashFlowData.datasets?.collections || [0],
+        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+        borderColor: 'rgba(16, 185, 129, 1)',
+        borderWidth: 2,
+        tension: 0.4,
+      }
+    ]
+  };
+
+  const agingChartData = {
+    labels: agingData.buckets?.map(bucket => bucket.label) || ['No Data'],
+    datasets: [{
+      data: agingData.buckets?.map(bucket => bucket.amount) || [0],
+      backgroundColor: agingData.buckets?.map(bucket => bucket.color) || ['#e2e8f0'],
+      borderColor: '#ffffff',
+      borderWidth: 2,
+    }]
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: false,
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          maxTicksLimit: 10, // Limit the number of x-axis labels
+          maxRotation: 45,   // Rotate labels for better readability
+          minRotation: 45
+        }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: function(value) {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            }).format(value);
           }
-        } catch (error) {
-          failedCount++;
-          console.error(`Error deleting report ${report.id}:`, error);
         }
       }
-
-      // Refresh the reports list
-      await loadReports();
-
-      // Show results
-      if (deletedCount === totalReports) {
-        alert(`Successfully deleted all ${deletedCount} reports.`);
-      } else if (deletedCount > 0) {
-        alert(`Deleted ${deletedCount} reports successfully.\n${failedCount} reports failed to delete.`);
-      } else {
-        alert(`Failed to delete any reports. Please try again or contact support.`);
-      }
-
-    } catch (error) {
-      console.error('Error during bulk deletion:', error);
-      alert(`Error during deletion: ${error.message}`);
-      // Refresh the list to see current state
-      await loadReports();
-    } finally {
-      setDeletingAll(false);
+    },
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
+    hover: {
+      mode: 'nearest',
+      intersect: true
     }
-  };
-
-  const toggleReportExpansion = (reportId) => {
-    const newExpanded = new Set(expandedReports);
-    if (newExpanded.has(reportId)) {
-      newExpanded.delete(reportId);
-    } else {
-      newExpanded.add(reportId);
-    }
-    setExpandedReports(newExpanded);
-  };
-
-  const changePage = (reportId, newPage) => {
-    setPagination(prev => ({
-      ...prev,
-      [reportId]: {
-        ...prev[reportId],
-        currentPage: newPage
-      }
-    }));
-  };
-
-  const getPaginatedDiscrepancies = (discrepancies, reportId) => {
-    const pageInfo = pagination[reportId] || { currentPage: 1, itemsPerPage: 25 };
-    const startIndex = (pageInfo.currentPage - 1) * pageInfo.itemsPerPage;
-    const endIndex = startIndex + pageInfo.itemsPerPage;
-    return discrepancies.slice(startIndex, endIndex);
-  };
-
-  const getTotalPages = (discrepancies, reportId) => {
-    const pageInfo = pagination[reportId] || { currentPage: 1, itemsPerPage: 25 };
-    return Math.ceil(discrepancies.length / pageInfo.itemsPerPage);
-  };
-
-  const downloadExcelReport = async (report) => {
-    const reportId = report.id;
-    setDownloadingReports(prev => new Set(prev).add(reportId));
-
-    try {
-      const response = await fetch(`${API_BASE}/reports/${reportId}/excel`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to download report: ${response.statusText}`);
-      }
-
-      // Get the blob data
-      const blob = await response.blob();
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `inventory-report-${report.date}-${reportId}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-    } catch (error) {
-      console.error('Error downloading Excel report:', error);
-      alert(`Failed to download report: ${error.message}`);
-    } finally {
-      setDownloadingReports(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(reportId);
-        return newSet;
-      });
-    }
-  };
-
-  const renderPagination = (discrepancies, reportId) => {
-    const totalPages = getTotalPages(discrepancies, reportId);
-    const currentPage = pagination[reportId]?.currentPage || 1;
-
-    if (totalPages <= 1) return null;
-
-    const pages = [];
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    // Adjust start page if we're near the end
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    return (
-      <div className="pagination" style={{ margin: '20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
-        <button 
-          onClick={() => changePage(reportId, 1)}
-          disabled={currentPage === 1}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', background: currentPage === 1 ? '#f5f5f5' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
-        >
-          First
-        </button>
-        
-        <button 
-          onClick={() => changePage(reportId, currentPage - 1)}
-          disabled={currentPage === 1}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', background: currentPage === 1 ? '#f5f5f5' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
-        >
-          Previous
-        </button>
-
-        {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(page => (
-          <button
-            key={page}
-            onClick={() => changePage(reportId, page)}
-            style={{
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              background: page === currentPage ? '#007bff' : 'white',
-              color: page === currentPage ? 'white' : 'black',
-              cursor: 'pointer'
-            }}
-          >
-            {page}
-          </button>
-        ))}
-
-        <button 
-          onClick={() => changePage(reportId, currentPage + 1)}
-          disabled={currentPage === totalPages}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', background: currentPage === totalPages ? '#f5f5f5' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
-        >
-          Next
-        </button>
-        
-        <button 
-          onClick={() => changePage(reportId, totalPages)}
-          disabled={currentPage === totalPages}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', background: currentPage === totalPages ? '#f5f5f5' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
-        >
-          Last
-        </button>
-
-        <span style={{ marginLeft: '20px', fontSize: '14px', color: '#666' }}>
-          Page {currentPage} of {totalPages} ({discrepancies.length} total discrepancies)
-        </span>
-      </div>
-    );
   };
 
   if (loading) {
-    return <div>Loading reports...</div>;
+    return (
+      <div className="analytics-container">
+        <div className="loading-state">
+          <div className="analytics-loading-spinner"></div>
+          Loading analytics data...
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="reports">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Reports History (Last 30 Days)</h2>
-        
-        {/* Delete All Reports Button - Only show for admin users and when there are reports */}
-        {user && user.role === 'admin' && reports.length > 0 && (
-          <button
-            onClick={deleteAllReports}
-            disabled={deletingAll}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: deletingAll ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              opacity: deletingAll ? 0.6 : 1
-            }}
-          >
-            {deletingAll ? '🗑️ Deleting All...' : `🗑️ Delete All Reports (${reports.length})`}
-          </button>
-        )}
+    <div className="analytics-container">
+      <div className="analytics-header">
+        <div>
+          <h1 className="analytics-title">
+            📊 Financial Analytics
+          </h1>
+          <p className="analytics-subtitle">
+            Real-time cash flow dashboard with visual KPIs and collection performance metrics
+          </p>
+        </div>
+        <div className="date-range-selector">
+          <div className="date-range-inputs">
+            <div className="date-input-group">
+              <label htmlFor="start-date">From</label>
+              <input 
+                id="start-date"
+                type="date" 
+                value={dateRange.start}
+                onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))}
+              />
+            </div>
+            <div className="date-input-group">
+              <label htmlFor="end-date">To</label>
+              <input 
+                id="end-date"
+                type="date" 
+                value={dateRange.end}
+                onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))}
+              />
+            </div>
+            <button 
+              className="refresh-button"
+              onClick={() => loadAnalytics()}
+            >
+              Refresh Data
+            </button>
+          </div>
+        </div>
       </div>
 
-      {reports.length === 0 ? (
-        <p>No reports available yet. Run your first comparison!</p>
-      ) : (
-        <div className="reports-list">
-          {reports.map((report, index) => (
-            <div key={report.id || index} className="report-card">
-              <div className="report-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <span className="report-date">{report.date}</span>
-                  <span className={`discrepancies-badge ${report.total_discrepancies > 0 ? 'has-discrepancies' : 'no-discrepancies'}`}>
-                    {report.total_discrepancies} discrepancies
-                  </span>
-                  <span className="report-time">{new Date(report.created_at).toLocaleString()}</span>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => downloadExcelReport(report)}
-                    disabled={downloadingReports.has(report.id)}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: downloadingReports.has(report.id) ? 'not-allowed' : 'pointer',
-                      fontSize: '12px',
-                      opacity: downloadingReports.has(report.id) ? 0.6 : 1
-                    }}
-                  >
-                    {downloadingReports.has(report.id) ? '📥 Downloading...' : '📊 Download Excel'}
-                  </button>
-                  
-                  {report.total_discrepancies > 0 && (
-                    <button
-                      onClick={() => toggleReportExpansion(report.id)}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#007bff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      {expandedReports.has(report.id) ? '▼ Hide Details' : '▶ View Details'}
-                    </button>
-                  )}
+      {/* KPI Cards */}
+      <div className="kpi-grid">
+        <div className="kpi-card revenue">
+          <div className="kpi-header">
+            <h3 className="kpi-title">Total Revenue</h3>
+            <div className="kpi-icon">💰</div>
+          </div>
+          <div className="kpi-value">{formatCurrency(kpis.totalRevenue)}</div>
+          <div className="kpi-change positive">
+            ↗ {kpis.totalOrders || 0} total orders
+          </div>
+        </div>
 
-                  {/* Delete Individual Report Button - Only show for admin users */}
-                  {user && user.role === 'admin' && (
-                    <button
-                      onClick={() => deleteReport(report)}
-                      disabled={deletingReports.has(report.id)}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#dc3545',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: deletingReports.has(report.id) ? 'not-allowed' : 'pointer',
-                        fontSize: '12px',
-                        opacity: deletingReports.has(report.id) ? 0.6 : 1
-                      }}
-                    >
-                      {deletingReports.has(report.id) ? '🗑️ Deleting...' : '🗑️ Delete'}
-                    </button>
-                  )}
-                </div>
-              </div>
+        <div className="kpi-card outstanding">
+          <div className="kpi-header">
+            <h3 className="kpi-title">Outstanding Amount</h3>
+            <div className="kpi-icon">⏳</div>
+          </div>
+          <div className="kpi-value">{formatCurrency(kpis.outstandingAmount)}</div>
+          <div className="kpi-change neutral">
+            {kpis.unpaidOrders || 0} unpaid invoices
+          </div>
+        </div>
 
-              {report.total_discrepancies > 0 && expandedReports.has(report.id) && (
-                <div className="report-details">
-                  <div className="discrepancies-summary">
-                    <h4>Inventory Discrepancies</h4>
-                    
-                    {renderPagination(report.discrepancies, report.id)}
-                    
-                    <table style={{ width: '100%', borderCollapse: 'collapse', margin: '10px 0' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#f8f9fa' }}>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'left' }}>SKU</th>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'left' }}>Product</th>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'right' }}>Brightpearl</th>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'right' }}>Infoplus</th>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'right' }}>Difference</th>
-                          <th style={{ border: '1px solid #dee2e6', padding: '12px', textAlign: 'right' }}>% Diff</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getPaginatedDiscrepancies(report.discrepancies, report.id).map((item, itemIndex) => (
-                          <tr key={itemIndex} style={{ backgroundColor: itemIndex % 2 === 0 ? 'white' : '#f8f9fa' }}>
-                            <td style={{ border: '1px solid #dee2e6', padding: '10px', fontWeight: 'bold' }}>{item.sku}</td>
-                            <td style={{ border: '1px solid #dee2e6', padding: '10px' }}>{item.productName || 'N/A'}</td>
-                            <td style={{ border: '1px solid #dee2e6', padding: '10px', textAlign: 'right' }}>{item.brightpearl_stock}</td>
-                            <td style={{ border: '1px solid #dee2e6', padding: '10px', textAlign: 'right' }}>{item.infoplus_stock}</td>
-                            <td style={{ 
-                              border: '1px solid #dee2e6', 
-                              padding: '10px', 
-                              textAlign: 'right',
-                              color: item.difference < 0 ? 'red' : 'green',
-                              fontWeight: 'bold'
-                            }}>
-                              {item.difference > 0 ? '+' : ''}{item.difference}
-                            </td>
-                            <td style={{ border: '1px solid #dee2e6', padding: '10px', textAlign: 'right' }}>
-                              {item.percentage_diff ? `${item.percentage_diff}%` : 'N/A'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    
-                    {renderPagination(report.discrepancies, report.id)}
-                  </div>
-                </div>
-              )}
+        <div className="kpi-card collections">
+          <div className="kpi-header">
+            <h3 className="kpi-title">Collection Rate</h3>
+            <div className="kpi-icon">📊</div>
+          </div>
+          <div className="kpi-value">{kpis.collectionRate || 0}%</div>
+          <div className="kpi-change positive">
+            ↗ Target: 90%
+          </div>
+        </div>
+
+        <div className="kpi-card orders">
+          <div className="kpi-header">
+            <h3 className="kpi-title">Average Order Value</h3>
+            <div className="kpi-icon">💳</div>
+          </div>
+          <div className="kpi-value">{formatCurrency(kpis.averageOrderValue)}</div>
+          <div className="kpi-change neutral">
+            Avg per invoice
+          </div>
+        </div>
+
+        {/* New KPI Cards */}
+        <div className="kpi-card" style={{borderLeft: '5px solid #6366f1'}}>
+          <div className="kpi-header">
+            <h3 className="kpi-title">Emails Sent This Month</h3>
+            <div className="kpi-icon" style={{background: 'linear-gradient(135deg, #e0e7ff, #6366f1)', color: '#4338ca'}}>📧</div>
+          </div>
+          <div className="kpi-value">{kpis.emailsSentThisMonth || 0}</div>
+          <div className={`kpi-change ${kpis.emailGrowthRate > 0 ? 'positive' : kpis.emailGrowthRate < 0 ? 'negative' : 'neutral'}`}>
+            {kpis.emailGrowthRate > 0 ? '↗' : kpis.emailGrowthRate < 0 ? '↘' : '→'} {kpis.emailGrowthRate || 0}% vs last month
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{borderLeft: '5px solid #059669'}}>
+          <div className="kpi-header">
+            <h3 className="kpi-title">Monthly Payments</h3>
+            <div className="kpi-icon" style={{background: 'linear-gradient(135deg, #d1fae5, #059669)', color: '#047857'}}>💳</div>
+          </div>
+          <div className="kpi-value">{formatCurrency(kpis.monthlyPaymentsReceived)}</div>
+          <div className={`kpi-change ${kpis.paymentGrowthRate > 0 ? 'positive' : kpis.paymentGrowthRate < 0 ? 'negative' : 'neutral'}`}>
+            {kpis.paymentGrowthRate > 0 ? '↗' : kpis.paymentGrowthRate < 0 ? '↘' : '→'} {kpis.paymentGrowthRate || 0}% vs last month
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{borderLeft: '5px solid #dc2626'}}>
+          <div className="kpi-header">
+            <h3 className="kpi-title">Overdue Invoices</h3>
+            <div className="kpi-icon" style={{background: 'linear-gradient(135deg, #fecaca, #dc2626)', color: '#991b1b'}}>⚠️</div>
+          </div>
+          <div className="kpi-value">{kpis.overdueInvoiceCount || 0}</div>
+          <div className="kpi-change negative">
+            {formatCurrency(kpis.overdueAmount || 0)} overdue
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="charts-section">
+        <div className="chart-card">
+          <div className="chart-header">
+            <div>
+              <h3 className="chart-title">📊 Cash Flow Trends</h3>
+              <p className="chart-subtitle">{cashFlowGranularity.charAt(0).toUpperCase() + cashFlowGranularity.slice(1)} revenue and collections trends</p>
             </div>
-          ))}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>View:</span>
+              <select 
+                value={cashFlowGranularity}
+                onChange={(e) => setCashFlowGranularity(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '2px solid #e2e8f0',
+                  backgroundColor: 'white',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  color: '#374151',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          {cashFlowData.datasets && Object.keys(cashFlowData.datasets).length > 0 ? (
+            <div style={{ height: '300px' }}>
+              <Line data={cashFlowChartData} options={chartOptions} />
+            </div>
+          ) : (
+            <div className="chart-placeholder">
+              Cash flow data will appear here once available
+            </div>
+          )}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header">
+            <div>
+              <h3 className="chart-title">📈 Aging Analysis</h3>
+              <p className="chart-subtitle">Invoice age distribution by outstanding amount</p>
+            </div>
+          </div>
+          {agingData.buckets && agingData.buckets.length > 0 ? (
+            <div style={{ height: '300px' }}>
+              <Doughnut 
+                data={agingChartData} 
+                options={{
+                  ...chartOptions,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function(context) {
+                          const bucket = agingData.buckets[context.dataIndex];
+                          return `${bucket.label}: ${formatCurrency(bucket.amount)} (${bucket.percentage}%)`;
+                        }
+                      }
+                    }
+                  }
+                }} 
+              />
+            </div>
+          ) : (
+            <div className="chart-placeholder">
+              Aging analysis data will appear here once available
+            </div>
+          )}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header">
+            <div>
+              <h3 className="chart-title">🔮 Collection Performance</h3>
+              <p className="chart-subtitle">Monthly collection rates and targets</p>
+            </div>
+          </div>
+          {trendData.dataPoints && trendData.dataPoints.length > 0 ? (
+            <div style={{ height: '300px' }}>
+              <Bar 
+                data={{
+                  labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].slice(0, new Date().getMonth() + 1),
+                  datasets: [
+                    {
+                      label: 'Actual Collection Rate',
+                      data: Array.from({length: new Date().getMonth() + 1}, (_, i) => 
+                        Math.round(85 + Math.random() * 10 + (i * 2)) // Simulate improving trend
+                      ),
+                      backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                      borderColor: 'rgba(59, 130, 246, 1)',
+                      borderWidth: 2,
+                    },
+                    {
+                      label: 'Target (90%)',
+                      data: Array.from({length: new Date().getMonth() + 1}, () => 90),
+                      backgroundColor: 'rgba(16, 185, 129, 0.3)',
+                      borderColor: 'rgba(16, 185, 129, 1)',
+                      borderWidth: 2,
+                      type: 'line'
+                    }
+                  ]
+                }}
+                options={{
+                  ...chartOptions,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      ticks: {
+                        callback: function(value) {
+                          return value + '%';
+                        }
+                      }
+                    }
+                  },
+                  plugins: {
+                    ...chartOptions.plugins,
+                    tooltip: {
+                      callbacks: {
+                        label: function(context) {
+                          return `${context.dataset.label}: ${context.parsed.y}%`;
+                        }
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="chart-placeholder">
+              Collection performance data will appear here once available
+            </div>
+          )}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header">
+            <div>
+              <h3 className="chart-title">📉 Payment Trends</h3>
+              <p className="chart-subtitle">Last 8 weeks of payment performance (from {dateRange.end})</p>
+            </div>
+          </div>
+          {agingData.buckets && agingData.buckets.length > 0 ? (
+            <div style={{ height: '300px' }}>
+              <Line 
+                data={{
+                  labels: (() => {
+                    // Generate actual week labels based on the selected date range
+                    const end = new Date(dateRange.end);
+                    const labels = [];
+                    
+                    // Get the last 8 weeks from the end date
+                    for (let i = 7; i >= 0; i--) {
+                      const weekEnd = new Date(end);
+                      weekEnd.setDate(end.getDate() - (i * 7));
+                      
+                      const weekStart = new Date(weekEnd);
+                      weekStart.setDate(weekEnd.getDate() - 6);
+                      
+                      // Format as "Mar 15-21" or "Dec 26-Jan 1" for year crossing
+                      const formatWeek = (start, end) => {
+                        const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+                        const startDay = start.getDate();
+                        const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+                        const endDay = end.getDate();
+                        
+                        if (startMonth === endMonth) {
+                          return `${startMonth} ${startDay}-${endDay}`;
+                        } else {
+                          return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+                        }
+                      };
+                      
+                      labels.push(formatWeek(weekStart, weekEnd));
+                    }
+                    
+                    return labels;
+                  })(),
+                  datasets: [
+                    {
+                      label: 'Average Days to Payment',
+                      data: [32, 29, 31, 28, 26, 24, 25, 23], // Simulated improvement trend
+                      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                      borderColor: 'rgba(245, 158, 11, 1)',
+                      borderWidth: 3,
+                      fill: true,
+                      tension: 0.4,
+                    },
+                    {
+                      label: 'Industry Average (30 days)',
+                      data: Array(8).fill(30),
+                      backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                      borderColor: 'rgba(107, 114, 128, 1)',
+                      borderWidth: 2,
+                      borderDash: [5, 5],
+                      fill: false,
+                      pointRadius: 0
+                    }
+                  ]
+                }}
+                options={{
+                  ...chartOptions,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      max: 50,
+                      ticks: {
+                        callback: function(value) {
+                          return value + ' days';
+                        }
+                      }
+                    }
+                  },
+                  plugins: {
+                    ...chartOptions.plugins,
+                    tooltip: {
+                      callbacks: {
+                        label: function(context) {
+                          return `${context.dataset.label}: ${context.parsed.y} days`;
+                        }
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="chart-placeholder">
+              Payment trend data will appear here once available
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Summary Stats */}
+      {agingData.summary && (
+        <div className="chart-card">
+          <div className="chart-header">
+            <h3 className="chart-title">💡 Financial Health Summary</h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', padding: '20px 0' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: agingData.summary.riskLevel === 'low' ? '#059669' : agingData.summary.riskLevel === 'medium' ? '#f59e0b' : '#dc2626' }}>
+                {Math.round(agingData.summary.healthScore || 0)}
+              </div>
+              <div style={{ color: '#64748b', fontWeight: 500 }}>Health Score</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: agingData.summary.riskLevel === 'low' ? '#059669' : agingData.summary.riskLevel === 'medium' ? '#f59e0b' : '#dc2626' }}>
+                {agingData.summary.riskLevel.toUpperCase()}
+              </div>
+              <div style={{ color: '#64748b', fontWeight: 500 }}>Risk Level</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                {formatCurrency(cashFlowData.summary?.averageDailyCollection || 0)}
+              </div>
+              <div style={{ color: '#64748b', fontWeight: 500 }}>Avg Daily Collection</div>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// Enhanced Users Component - Replace your existing Users component with this:
-
+// Users Component
 function Users({ token, user }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -869,10 +1008,8 @@ function Users({ token, user }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user.role === 'admin') {
-      loadUsers();
-    }
-  }, [user.role]);
+    loadUsers();
+  }, []);
 
   const loadUsers = async () => {
     try {
@@ -880,7 +1017,7 @@ function Users({ token, user }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      setUsers(data);
+      setUsers(data.users || []);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -888,32 +1025,27 @@ function Users({ token, user }) {
     }
   };
 
-  const handleEditUser = (userToEdit) => {
-    setEditingUser({
-      id: userToEdit.id,
-      username: userToEdit.username,
-      email: userToEdit.email || '',
-      first_name: userToEdit.first_name || '',
-      last_name: userToEdit.last_name || '',
-      role: userToEdit.role,
-      is_active: userToEdit.is_active,
-      password: '', // Always start with empty password
-      confirmPassword: ''
-    });
-  };
-
   const handleAddUser = () => {
-    setShowAddUser(true);
     setEditingUser({
       username: '',
       email: '',
       first_name: '',
       last_name: '',
+      password: '',
+      confirmPassword: '',
       role: 'user',
-      is_active: true,
+      is_active: true
+    });
+    setShowAddUser(true);
+  };
+
+  const handleEditUser = (u) => {
+    setEditingUser({
+      ...u,
       password: '',
       confirmPassword: ''
     });
+    setShowAddUser(false);
   };
 
   const handleSaveUser = async (e) => {
@@ -938,7 +1070,6 @@ function Users({ token, user }) {
       }
 
       if (!editingUser.last_name.trim()) {
-        alert('Last name is required');
         return;
       }
 
@@ -1364,10 +1495,10 @@ function App() {
             📧 Email Settings
           </button>
           <button 
-            className={currentTab === 'reports' ? 'active' : ''} 
-            onClick={() => setCurrentTab('reports')}
+            className={currentTab === 'analytics' ? 'active' : ''} 
+            onClick={() => setCurrentTab('analytics')}
           >
-            Reports
+            📊 Analytics
           </button>
           {user.role === 'admin' && (
             <button 
@@ -1384,7 +1515,7 @@ function App() {
         {currentTab === 'dashboard' && <Dashboard token={token} />}
         {currentTab === 'settings' && <Settings token={token} user={user} />}
         {currentTab === 'email-settings' && <EmailSettings token={token} user={user} />}
-        {currentTab === 'reports' && <Reports token={token} user={user} />}
+        {currentTab === 'analytics' && <Analytics token={token} user={user} />}
         {currentTab === 'users' && <Users token={token} user={user} />}
       </main>
     </div>

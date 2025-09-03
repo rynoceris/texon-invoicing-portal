@@ -15,8 +15,8 @@ function InvoiceDashboard({ token }) {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({
-    column: 'placedon',
-    order: 'desc'
+    column: 'taxdate',
+    order: 'asc'
   });
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [settings, setSettings] = useState({});
@@ -31,7 +31,8 @@ function InvoiceDashboard({ token }) {
     userNotes: [],
     brightpearlNotes: [],
     isLoading: false,
-    newNote: ''
+    newNote: '',
+    error: null
   });
 
   // Email functionality state
@@ -45,10 +46,19 @@ function InvoiceDashboard({ token }) {
   // Load invoice statistics
   const loadStatistics = async () => {
     try {
+      // Add timeout for statistics request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch(
         `${API_BASE}/invoices/statistics?start_date=${dateRange.start}&end_date=${dateRange.end}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: controller.signal
+        }
       );
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
@@ -58,11 +68,13 @@ function InvoiceDashboard({ token }) {
       }
     } catch (error) {
       console.error('Error loading statistics:', error);
+      // Don't show error for statistics as it's not critical
     }
   };
 
-  // Load unpaid invoices with pagination and sorting
-  const loadUnpaidInvoices = async (page = currentPage, sort = sortConfig, currentFilters = filters) => {
+  // Load unpaid invoices with pagination and sorting (with explicit per-page parameter)
+  const loadUnpaidInvoicesWithPerPage = async (page = currentPage, sort = sortConfig, currentFilters = filters, perPageOverride = null) => {
+    const effectiveItemsPerPage = perPageOverride || itemsPerPage;
     setIsLoading(true);
     setError('');
     
@@ -71,7 +83,7 @@ function InvoiceDashboard({ token }) {
         start_date: dateRange.start,
         end_date: dateRange.end,
         page: page,
-        limit: itemsPerPage,
+        limit: effectiveItemsPerPage,
         sort_by: sort.column,
         sort_order: sort.order
       });
@@ -86,10 +98,19 @@ function InvoiceDashboard({ token }) {
         params.append('search_type', currentFilters.searchType);
       }
 
+      // Add timeout and abort controller for better performance
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
       const response = await fetch(
         `${API_BASE}/invoices/unpaid?${params}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: controller.signal
+        }
       );
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
@@ -103,10 +124,20 @@ function InvoiceDashboard({ token }) {
         setError('Server error loading invoices');
       }
     } catch (error) {
-      setError('Network error loading invoices');
+      if (error.name === 'AbortError') {
+        setError('Request timed out. The server may be busy. Please try again.');
+      } else {
+        setError('Network error loading invoices');
+      }
+      console.error('Error loading invoices:', error);
     }
     
     setIsLoading(false);
+  };
+
+  // Backward compatibility wrapper
+  const loadUnpaidInvoices = async (page = currentPage, sort = sortConfig, currentFilters = filters) => {
+    return loadUnpaidInvoicesWithPerPage(page, sort, currentFilters, null);
   };
 
   // Load settings to get per-page configuration
@@ -137,8 +168,8 @@ function InvoiceDashboard({ token }) {
     const initializeData = async () => {
       const perPage = await loadSettings(); // Wait for settings to load first
       loadStatistics();
-      // Load invoices with the correct per-page setting
-      loadUnpaidInvoices(currentPage, sortConfig, filters);
+      // Load invoices with the correct per-page setting (use the returned value, not state)
+      await loadUnpaidInvoicesWithPerPage(currentPage, sortConfig, filters, perPage);
     };
     
     initializeData();
@@ -198,36 +229,69 @@ function InvoiceDashboard({ token }) {
 
   // Notes functionality
   const openNotesModal = async (invoice) => {
+    // Set initial modal state
     setNotesModal(prev => ({
       ...prev,
       isOpen: true,
       invoice: invoice,
       isLoading: true,
       userNotes: [],
-      brightpearlNotes: [],
-      newNote: ''
+      brightpearlNotes: invoice.brightpearlNotes || [], // Use cached Brightpearl notes
+      newNote: '',
+      error: null // Clear any previous errors
     }));
 
-    // Load notes for this order
+    // Only load user notes via API (Brightpearl notes are already cached)
     try {
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch(`${API_BASE}/orders/${invoice.id}/notes`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setNotesModal(prev => ({
-            ...prev,
-            userNotes: data.userNotes || data.notes || [], // Handle both old and new API format
-            brightpearlNotes: data.brightpearlNotes || [],
-            isLoading: false
-          }));
+          // Only update if the modal is still open for this invoice (prevent race conditions)
+          setNotesModal(prev => {
+            if (prev.isOpen && prev.invoice?.id === invoice.id) {
+              return {
+                ...prev,
+                userNotes: data.userNotes || data.notes || [], // Only user notes
+                isLoading: false,
+                error: null
+              };
+            }
+            return prev; // Don't update if modal was closed or changed
+          });
+        } else {
+          throw new Error(data.error || 'Failed to load notes');
         }
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Error loading notes:', error);
-      setNotesModal(prev => ({ ...prev, isLoading: false }));
+      console.error('Error loading user notes:', error);
+      const errorMessage = error.name === 'AbortError' 
+        ? 'Request timed out. Please try again.' 
+        : error.message || 'Failed to load notes';
+      
+      // Only update error state if modal is still open for this invoice
+      setNotesModal(prev => {
+        if (prev.isOpen && prev.invoice?.id === invoice.id) {
+          return { 
+            ...prev, 
+            isLoading: false,
+            error: errorMessage
+          };
+        }
+        return prev;
+      });
     }
   };
 
@@ -238,7 +302,8 @@ function InvoiceDashboard({ token }) {
       userNotes: [],
       brightpearlNotes: [],
       isLoading: false,
-      newNote: ''
+      newNote: '',
+      error: null
     });
   };
 
@@ -432,6 +497,36 @@ function InvoiceDashboard({ token }) {
     });
   };
 
+  // Get stock status icon class
+  const getStockStatusIcon = (stockStatus) => {
+    if (!stockStatus) return null;
+    
+    const status = stockStatus.toLowerCase();
+    if (status.includes('all') && status.includes('fulfilled')) {
+      return 'stock-all-fulfilled';
+    } else if (status.includes('no') && status.includes('fulfilled')) {
+      return 'stock-none-fulfilled';
+    } else if (status.includes('partial') && status.includes('fulfilled')) {
+      return 'stock-partial-fulfilled';
+    }
+    return null;
+  };
+
+  // Get shipping status icon class
+  const getShippingStatusIcon = (shippingStatus) => {
+    if (!shippingStatus) return null;
+    
+    const status = shippingStatus.toLowerCase();
+    if (status.includes('no') && status.includes('shipped')) {
+      return 'shipping-none';
+    } else if (status.includes('some') && status.includes('shipped')) {
+      return 'shipping-partial';  
+    } else if (status.includes('all') && status.includes('shipped')) {
+      return 'shipping-all';
+    }
+    return null;
+  };
+
   // Render pagination controls
   const renderPagination = () => {
     if (!pagination || pagination.total_pages <= 1) return null;
@@ -552,6 +647,17 @@ function InvoiceDashboard({ token }) {
               <h4>Total Revenue</h4>
               <p className="stat-amount">{formatCurrency(statistics.total_amount)}</p>
               <small>Paid + Outstanding</small>
+            </div>
+            
+            <div className="stat-card unpaid-percentage">
+              <h4>📊 Unpaid Rate</h4>
+              <p className="stat-percentage">
+                {statistics.total_orders > 0 
+                  ? ((statistics.unpaid_orders / statistics.total_orders) * 100).toFixed(1)
+                  : 0
+                }%
+              </p>
+              <small>{statistics.unpaid_orders.toLocaleString()} of {statistics.total_orders.toLocaleString()} orders</small>
             </div>
           </div>
         </div>
@@ -726,6 +832,13 @@ function InvoiceDashboard({ token }) {
                         Order Date{getSortIndicator('placedon')}
                       </th>
                       <th 
+                        onClick={() => handleSort('taxdate')} 
+                        className="sortable-header"
+                        title="Click to sort by Tax Date"
+                      >
+                        Tax Date{getSortIndicator('taxdate')}
+                      </th>
+                      <th 
                         onClick={() => handleSort('totalvalue')} 
                         className="sortable-header"
                         title="Click to sort by Amount"
@@ -780,11 +893,8 @@ function InvoiceDashboard({ token }) {
                   </thead>
                   <tbody>
                     {unpaidInvoices.map((invoice) => {
-                      const orderDate = new Date(invoice.orderDate);
-                      const daysOutstanding = invoice.days_outstanding || Math.floor((new Date() - orderDate) / (1000 * 60 * 60 * 24));
-                      
                       return (
-                        <tr key={invoice.id} className={daysOutstanding > 30 ? 'overdue' : ''}>
+                        <tr key={invoice.id} className={invoice.days_outstanding > 30 ? 'overdue' : ''}>
                           <td>
                             <strong>{invoice.orderNumber || `#${invoice.id}`}</strong>
                           </td>
@@ -810,6 +920,7 @@ function InvoiceDashboard({ token }) {
                           </td>
                           <td>{invoice.company.name || 'N/A'}</td>
                           <td>{formatDate(invoice.orderDate)}</td>
+                          <td>{formatDate(invoice.taxDate)}</td>
                           <td>
                             {invoice.paymentStatus?.toLowerCase().includes('partial') && invoice.paidAmount > 0 ? (
                               <div>
@@ -841,24 +952,34 @@ function InvoiceDashboard({ token }) {
                             </span>
                           </td>
                           <td>
-                            <span 
-                              className="status-badge" 
-                              style={{ backgroundColor: invoice.shippingStatusColor, color: 'white' }}
-                            >
-                              {invoice.shippingStatus}
-                            </span>
+                            {(() => {
+                              const iconClass = getShippingStatusIcon(invoice.shippingStatus);
+                              return iconClass ? (
+                                <span 
+                                  className={`bp-status-icon ${iconClass}`}
+                                  title={invoice.shippingStatus}
+                                ></span>
+                              ) : (
+                                <span className="status-fallback">-</span>
+                              );
+                            })()}
                           </td>
                           <td>
-                            <span 
-                              className="status-badge" 
-                              style={{ backgroundColor: invoice.stockStatusColor, color: 'white' }}
-                            >
-                              {invoice.stockStatus}
-                            </span>
+                            {(() => {
+                              const iconClass = getStockStatusIcon(invoice.stockStatus);
+                              return iconClass ? (
+                                <span 
+                                  className={`bp-status-icon ${iconClass}`}
+                                  title={invoice.stockStatus}
+                                ></span>
+                              ) : (
+                                <span className="status-fallback">-</span>
+                              );
+                            })()}
                           </td>
                           <td>
-                            <span className={daysOutstanding > 30 ? 'overdue-days' : 'normal-days'}>
-                              {daysOutstanding} days
+                            <span className={invoice.days_outstanding > 30 ? 'overdue-days' : 'normal-days'}>
+                              {invoice.days_outstanding} days
                             </span>
                           </td>
                           <td>
@@ -1056,9 +1177,27 @@ function InvoiceDashboard({ token }) {
               {/* Notes sections */}
               {notesModal.isLoading ? (
                 <div className="loading">Loading notes...</div>
+              ) : notesModal.error ? (
+                <div className="error-message">
+                  <strong>Error loading notes:</strong> {notesModal.error}
+                  <button 
+                    onClick={() => openNotesModal(notesModal.invoice)}
+                    className="btn-secondary"
+                    style={{marginLeft: '10px', fontSize: '12px'}}
+                  >
+                    🔄 Retry
+                  </button>
+                </div>
               ) : (
                 <>
-                  {/* Brightpearl Notes Section */}
+                  {/* Show loading indicator only for user notes if still loading */}
+                  {notesModal.isLoading && (
+                    <div className="loading" style={{fontSize: '14px', textAlign: 'center', margin: '10px 0'}}>
+                      Loading your notes...
+                    </div>
+                  )}
+                  
+                  {/* Brightpearl Notes Section - Show immediately since cached */}
                   {notesModal.brightpearlNotes && notesModal.brightpearlNotes.length > 0 && (
                     <div className="notes-section">
                       <h4 className="notes-section-title">
@@ -1086,7 +1225,7 @@ function InvoiceDashboard({ token }) {
                             </div>
                             <div className="note-meta">
                               <span className="note-author">
-                                Contact ID: {note.contactId} | Added by: {note.addedBy}
+                                Contact: {note.contactName ? `${note.contactName} (ID: ${note.contactId})` : `ID: ${note.contactId}`} | Added by: {note.addedBy}
                               </span>
                               <span className="note-date">
                                 {note.formattedDate}

@@ -326,6 +326,17 @@ nav button.active {
   font-size: 0.8rem;
 }
 
+.stat-percentage {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  color: #ff6b35 !important;
+}
+
+.unpaid-percentage {
+  background: linear-gradient(135deg, #fff5f3 0%, #ffffff 100%);
+  border-left: 4px solid #ff6b35;
+}
+
 /* Manual Run Section */
 .manual-run {
   background: white;
@@ -1101,5 +1112,554 @@ nav button.active {
     font-size: 11px;
     padding: 3px 6px;
     min-height: 24px;
+  }
+}
+
+/* Brightpearl Status Sprite Icons */
+.bp-status-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-image: url('https://dxfbapopdsmzi.cloudfront.net/5.0.1446/build/images/icons/sprite.png');
+  background-repeat: no-repeat;
+  cursor: help;
+  vertical-align: middle;
+}
+
+/* Stock Status Icons */
+.bp-status-icon.stock-all-fulfilled {
+  background-position: -32px -48px;
+}
+
+.bp-status-icon.stock-none-fulfilled {
+  background-position: 0 -48px;
+}
+
+.bp-status-icon.stock-partial-fulfilled {
+  background-position: -16px -48px;
+}
+
+/* Shipping Status Icons */
+.bp-status-icon.shipping-none {
+  background-position: -47px -128px;
+}
+
+.bp-status-icon.shipping-partial {
+  background-position: -64px -128px;
+}
+
+.bp-status-icon.shipping-all {
+  background-position: -80px -128px;
+}
+
+/* Fallback for unknown statuses */
+.status-fallback {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-weight: bold;
+  color: #999;
+  vertical-align: middle;
+}
+
+/* ===== ANALYTICS DASHBOARD STYLES ===== */
+
+.analytics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 30px 20px;
+  background: #f8f9fa;
+  min-height: calc(100vh - 140px);
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.analytics-title {
+  color: #2c3e50;
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.analytics-subtitle {
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 400;
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+
+/* Date Range Selector */
+.date-range-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid #e2e8f0;
+}
+
+.date-range-inputs {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.date-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.date-input-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.date-input-group input {
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fafafa;
+  transition: all 0.2s ease;
+  min-width: 140px;
+}
+
+.date-input-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.refresh-button {
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  height: fit-content;
+  align-self: flex-end;
+}
+
+.refresh-button:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.refresh-button:active {
+  transform: translateY(0);
+}
+
+/* KPI Cards Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.kpi-card {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f1f5f9;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.1), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-card:hover::before {
+  transform: scaleX(1);
+}
+
+.kpi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.kpi-title {
+  color: #64748b;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  color: #64748b;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.kpi-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 8px 0;
+  line-height: 1.2;
+}
+
+.kpi-change {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.kpi-change.positive {
+  color: #059669;
+}
+
+.kpi-change.negative {
+  color: #dc2626;
+}
+
+.kpi-change.neutral {
+  color: #64748b;
+}
+
+/* Different KPI Card Themes */
+.kpi-card.revenue {
+  border-left: 5px solid #10b981;
+}
+
+.kpi-card.revenue .kpi-icon {
+  background: linear-gradient(135deg, #d1fae5, #10b981);
+  color: #047857;
+}
+
+.kpi-card.outstanding {
+  border-left: 5px solid #f59e0b;
+}
+
+.kpi-card.outstanding .kpi-icon {
+  background: linear-gradient(135deg, #fef3c7, #f59e0b);
+  color: #d97706;
+}
+
+.kpi-card.collections {
+  border-left: 5px solid #3b82f6;
+}
+
+.kpi-card.collections .kpi-icon {
+  background: linear-gradient(135deg, #dbeafe, #3b82f6);
+  color: #2563eb;
+}
+
+.kpi-card.orders {
+  border-left: 5px solid #8b5cf6;
+}
+
+.kpi-card.orders .kpi-icon {
+  background: linear-gradient(135deg, #ede9fe, #8b5cf6);
+  color: #7c3aed;
+}
+
+/* Charts Section */
+.charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f1f5f9;
+  transition: all 0.3s ease;
+}
+
+.chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.1), 0 4px 8px -4px rgba(0, 0, 0, 0.06);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.chart-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chart-subtitle {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.chart-placeholder {
+  height: 300px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 1.1rem;
+  font-weight: 500;
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  transition: all 0.3s ease;
+}
+
+.chart-placeholder:hover {
+  border-color: #94a3b8;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+}
+
+/* Loading and Error States */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #64748b;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.analytics-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e2e8f0;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 12px;
+}
+
+.error-state {
+  background: #fef2f2;
+  border: 2px solid #fecaca;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.error-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.error-message {
+  color: #991b1b;
+  font-size: 0.95rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .analytics-container {
+    padding: 20px 15px;
+  }
+  
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  
+  .charts-section {
+    grid-template-columns: 1fr;
+    gap: 25px;
+  }
+}
+
+@media (max-width: 768px) {
+  .analytics-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .analytics-title {
+    font-size: 1.8rem;
+  }
+  
+  .date-range-inputs {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .date-input-group {
+    width: 100%;
+  }
+  
+  .date-input-group input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .refresh-button {
+    width: 100%;
+    align-self: stretch;
+  }
+  
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .kpi-card {
+    padding: 20px;
+  }
+  
+  .kpi-value {
+    font-size: 2rem;
+  }
+  
+  .chart-card {
+    padding: 20px;
+  }
+  
+  .chart-placeholder {
+    height: 250px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-container {
+    padding: 15px 10px;
+  }
+  
+  .analytics-title {
+    font-size: 1.5rem;
+  }
+  
+  .kpi-card {
+    padding: 16px;
+  }
+  
+  .kpi-value {
+    font-size: 1.8rem;
+  }
+  
+  .chart-card {
+    padding: 16px;
+  }
+  
+  .chart-title {
+    font-size: 1.2rem;
+  }
+}
+
+/* Animation Keyframes */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.analytics-container * {
+  animation: slideInUp 0.6s ease-out;
+}
+
+/* Dark mode support (for future implementation) */
+@media (prefers-color-scheme: dark) {
+  .analytics-container {
+    background: #0f172a;
+  }
+  
+  .kpi-card, .chart-card, .date-range-selector {
+    background: #1e293b;
+    border-color: #334155;
+  }
+  
+  .analytics-title, .kpi-value, .chart-title {
+    color: #f1f5f9;
+  }
+  
+  .analytics-subtitle, .kpi-title, .chart-subtitle {
+    color: #94a3b8;
+  }
+  
+  .date-input-group input {
+    background: #334155;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+  
+  .chart-placeholder {
+    background: linear-gradient(135deg, #334155, #475569);
+    border-color: #475569;
+    color: #94a3b8;
   }
 }

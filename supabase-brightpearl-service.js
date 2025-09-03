@@ -148,14 +148,14 @@ class SupabaseBrightpearlService {
     /**
      * Get unpaid invoices with pagination and sorting
      */
-    async getUnpaidInvoices(startDate = '2024-01-01', endDate = '2025-12-31', page = 1, limit = 25, sortBy = 'placedon', sortOrder = 'desc', filterOptions = {}) {
+    async getUnpaidInvoices(startDate = '2024-01-01', endDate = '2025-12-31', page = 1, limit = 25, sortBy = 'taxdate', sortOrder = 'asc', filterOptions = {}) {
         try {
             const offset = (page - 1) * limit;
             
             // Get ignored order statuses
             const ignoredStatusIds = await this.getIgnoredOrderStatuses();
             
-            // Build the base query without joins
+            // Build the base query 
             let query = this.supabase
                 .from('order')
                 .select(`
@@ -175,6 +175,9 @@ class SupabaseBrightpearlService {
                     billingemail,
                     deliveryemail
                 `, { count: 'exact' })
+            
+            // Apply common filters to both query types
+            query = query
                 .eq('isdeleted', false)
                 .eq('ordertypecode', 'SO')
                 .gte('placedon', startDate)
@@ -189,33 +192,9 @@ class SupabaseBrightpearlService {
                 console.log(`🔍 Excluding orders with status IDs: [${ignoredStatusIds.join(', ')}]`);
             }
 
-            // Apply Days Outstanding filter
-            if (filterOptions.daysOutstandingFilter) {
-                const now = new Date();
-                let filterDate;
-                
-                switch (filterOptions.daysOutstandingFilter) {
-                    case 'over90':
-                        filterDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-                        query = query.lte('placedon', filterDate.toISOString());
-                        break;
-                    case '60to90':
-                        const date90 = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-                        const date60 = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
-                        query = query.gte('placedon', date90.toISOString()).lte('placedon', date60.toISOString());
-                        break;
-                    case '30to60':
-                        const date60b = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
-                        const date30 = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                        query = query.gte('placedon', date60b.toISOString()).lte('placedon', date30.toISOString());
-                        break;
-                    case 'under30':
-                        const date30b = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                        query = query.gte('placedon', date30b.toISOString());
-                        break;
-                }
-                console.log(`🔍 Applying days outstanding filter: ${filterOptions.daysOutstandingFilter}`);
-            }
+            // Note: Days Outstanding filtering is now handled after data fetching
+            // since we need to consider tax dates which come from a separate table
+            // The filter is applied in post-processing after formatInvoiceData()
 
             // Apply search filter
             if (filterOptions.searchTerm && filterOptions.searchTerm.trim()) {
@@ -315,6 +294,11 @@ class SupabaseBrightpearlService {
                 case 'stock_status':
                     query = query.order('stockstatuscode', { ascending });
                     break;
+                case 'taxdate':
+                    // For taxdate sorting, we need to fetch all data and sort in memory
+                    // Don't apply any ordering here - will be handled in post-processing
+                    query = query.order('id', { ascending: true }); // Consistent base ordering
+                    break;
                 case 'days_outstanding':
                 case 'placedon':
                 default:
@@ -322,9 +306,8 @@ class SupabaseBrightpearlService {
                     break;
             }
 
-            // Apply pagination
+            // Apply pagination (same for all sorts to avoid rate limiting)
             query = query.range(offset, offset + limit - 1);
-
             const { data, error, count } = await query;
 
             if (error) {
@@ -350,15 +333,59 @@ class SupabaseBrightpearlService {
             // Get notes count for these orders (user notes)
             const notesData = await this.getNotesCountForOrders(orderIds);
             
-            // Get Brightpearl order notes for these orders
-            const brightpearlNotesData = await this.getBrightpearlNotesForOrders(orderIds);
+            // Temporarily disable Brightpearl notes to reduce API load during rate limiting
+            // const brightpearlNotesData = await this.getBrightpearlNotesForOrders(orderIds);
+            const brightpearlNotesData = {};
             
             // Get payment links for these orders
             const paymentLinksData = await this.paymentLinksService.getPaymentLinksForOrders(orderIds);
             
+            // Get tax date data for these orders
+            const taxDateData = await this.getTaxDateForOrders(orderIds);
+            
+            // Format the data
+            let formattedData = this.formatInvoiceData(data, paymentData, notesData, invoiceData, brightpearlNotesData, paymentLinksData, taxDateData);
+            
+            // Apply Days Outstanding filter based on tax date (post-processing)
+            if (filterOptions.daysOutstandingFilter) {
+                const now = new Date();
+                formattedData = formattedData.filter(invoice => {
+                    const daysOutstanding = invoice.days_outstanding;
+                    
+                    switch (filterOptions.daysOutstandingFilter) {
+                        case 'over90':
+                            return daysOutstanding > 90;
+                        case '60to90':
+                            return daysOutstanding >= 60 && daysOutstanding <= 90;
+                        case '30to60':
+                            return daysOutstanding >= 30 && daysOutstanding < 60;
+                        case 'under30':
+                            return daysOutstanding < 30;
+                        default:
+                            return true;
+                    }
+                });
+                console.log(`🔍 Applied days outstanding filter (${filterOptions.daysOutstandingFilter}): ${formattedData.length} invoices remaining`);
+            }
+            
+            // Handle special sorting cases that require post-fetch processing
+            if (sortBy === 'taxdate') {
+                const ascending = sortOrder.toLowerCase() === 'asc';
+                formattedData.sort((a, b) => {
+                    const dateA = a.taxDate ? new Date(a.taxDate) : new Date(0); // Orders without tax date go to beginning/end
+                    const dateB = b.taxDate ? new Date(b.taxDate) : new Date(0);
+                    
+                    if (ascending) {
+                        return dateA - dateB;
+                    } else {
+                        return dateB - dateA;
+                    }
+                });
+            }
+            
             return {
                 success: true,
-                data: this.formatInvoiceData(data, paymentData, notesData, invoiceData, brightpearlNotesData, paymentLinksData),
+                data: formattedData,
                 count: data.length,
                 total_count: count,
                 pagination: {
@@ -806,12 +833,59 @@ class SupabaseBrightpearlService {
     }
 
     /**
+     * Get tax date data for a list of order IDs from orderinvoice table
+     */
+    async getTaxDateForOrders(orderIds) {
+        if (!orderIds || orderIds.length === 0) {
+            return {};
+        }
+
+        try {
+            const taxDatesByOrder = {};
+            
+            console.log(`📅 Loading tax date data for ${orderIds.length} orders...`);
+
+            const { data, error } = await this.supabase
+                .from('orderinvoice')
+                .select('orderid, taxdate')
+                .in('orderid', orderIds)
+                .eq('isdeleted', false)
+                .not('taxdate', 'is', null);
+
+            if (error) {
+                console.error('❌ Error fetching tax date data:', error);
+                return {};
+            }
+
+            // Map tax dates by order_id
+            if (data && data.length > 0) {
+                data.forEach(invoice => {
+                    const orderId = invoice.orderid;
+                    taxDatesByOrder[orderId] = invoice.taxdate;
+                });
+            }
+
+            const ordersWithTaxDate = Object.keys(taxDatesByOrder);
+            console.log(`📅 Found tax dates for ${ordersWithTaxDate.length} orders`);
+            
+            return taxDatesByOrder;
+
+        } catch (error) {
+            console.error('❌ Error in getTaxDateForOrders:', error);
+            return {};
+        }
+    }
+
+    /**
      * Format invoice data for the frontend
      */
-    formatInvoiceData(invoices, paymentData = {}, notesData = {}, invoiceData = {}, brightpearlNotesData = {}, paymentLinksData = {}) {
+    formatInvoiceData(invoices, paymentData = {}, notesData = {}, invoiceData = {}, brightpearlNotesData = {}, paymentLinksData = {}, taxDateData = {}) {
         return invoices.map(invoice => {
             const orderDate = new Date(invoice.placedon);
-            const daysOutstanding = Math.floor((new Date() - orderDate) / (1000 * 60 * 60 * 24));
+            // Calculate days outstanding based on tax date if available, otherwise fall back to order date
+            const taxDate = taxDateData[invoice.id] ? new Date(taxDateData[invoice.id]) : null;
+            const baseDate = taxDate || orderDate; // Use tax date if available, otherwise order date
+            const daysOutstanding = Math.floor((new Date() - baseDate) / (1000 * 60 * 60 * 24));
             
             const totalAmount = parseFloat(invoice.total || 0);
             const paidAmount = paymentData[invoice.id] || 0;
@@ -824,6 +898,7 @@ class SupabaseBrightpearlService {
                 invoiceNumber: invoiceData[invoice.id] || null,
                 orderDate: invoice.placedon,
                 invoiceDate: invoice.placedon, // Using placedon as invoice date
+                taxDate: taxDateData[invoice.id] || null, // Tax date from orderinvoice table
                 totalAmount: totalAmount,
                 paidAmount: paidAmount,
                 outstandingAmount: outstandingAmount,
@@ -954,6 +1029,7 @@ class SupabaseBrightpearlService {
         };
         return colorMap[paymentStatus] || '#6c757d';
     }
+
 }
 
 module.exports = SupabaseBrightpearlService;
