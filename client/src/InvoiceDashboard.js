@@ -677,6 +677,7 @@ function InvoiceDashboard({ token }) {
               <option value="all">All Invoices</option>
               <option value="over90">Over 90 Days</option>
               <option value="60to90">60-90 Days</option>
+              <option value="over30">Over 30 Days</option>
               <option value="30to60">30-60 Days</option>
               <option value="under30">Under 30 Days</option>
             </select>
@@ -725,6 +726,7 @@ function InvoiceDashboard({ token }) {
                   Days Outstanding: {
                     filters.daysOutstanding === 'over90' ? 'Over 90 Days' :
                     filters.daysOutstanding === '60to90' ? '60-90 Days' :
+                    filters.daysOutstanding === 'over30' ? 'Over 30 Days' :
                     filters.daysOutstanding === '30to60' ? '30-60 Days' :
                     'Under 30 Days'
                   }

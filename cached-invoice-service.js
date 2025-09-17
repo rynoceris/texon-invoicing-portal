@@ -88,6 +88,9 @@ class CachedInvoiceService {
                     case '60to90':
                         query = query.gte('days_outstanding', 60).lte('days_outstanding', 90);
                         break;
+                    case 'over30':
+                        query = query.gt('days_outstanding', 30);
+                        break;
                     case '30to60':
                         query = query.gte('days_outstanding', 30).lt('days_outstanding', 60);
                         break;

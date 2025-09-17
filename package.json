@@ -1,6 +1,6 @@
 {
   "name": "texon-invoicing-portal",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Texon invoicing portal for Brightpearl unpaid invoices",
   "main": "server.js",
   "scripts": {
@@ -10,6 +10,7 @@
     "install:client": "cd client && npm install"
   },
   "dependencies": {
+    "@playwright/test": "^1.55.0",
     "@supabase/supabase-js": "^2.53.0",
     "axios": "^1.11.0",
     "bcrypt": "^5.1.1",

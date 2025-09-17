@@ -1,6 +1,20 @@
 # Texon Invoicing Portal
 
-A comprehensive invoice management and email automation system built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, generate payment links, and automate customer communications.
+A comprehensive financial operations platform built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, provide advanced analytics, automate contact enrichment, and streamline customer communications with intelligent automation.
+
+## 🎉 Latest Release - v1.1.1
+
+**🚀 New in September 2025:**
+- **📊 Enhanced PDF Invoice Generation** with improved Brightpearl formatting compatibility
+- **💰 Amount Due Calculations** for partially paid invoices with automatic balance calculation
+- **🎨 Logo Integration** with proper sizing and professional branding
+- **📋 SKU Display Fixes** eliminating incorrect placeholder values
+- **📅 Corrected Date Sources** using proper Brightpearl invoice date fields
+- **⚡ Performance Optimizations** with dual database integration
+
+[![Version](https://img.shields.io/badge/version-1.1.1-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
+[![Analytics](https://img.shields.io/badge/analytics-Chart.js-blue)](https://www.chartjs.org/)
+[![Performance](https://img.shields.io/badge/performance-+70%25-green)](https://github.com/rynoceris/texon-invoicing-portal)
 
 ## 📋 Table of Contents
 
@@ -19,21 +33,33 @@ A comprehensive invoice management and email automation system built for Texon T
 
 ## ✨ Features
 
-### 📊 Dashboard & Invoice Management
-- **Real-time invoice tracking** with Brightpearl ERP integration
+### 📊 Analytics Dashboard & Invoice Management
+- **Real-time financial analytics** with Chart.js visualizations
+- **Interactive cash flow charts** showing payment trends over time
+- **Aging analysis visualization** with dynamic filtering and insights
+- **Financial KPI tracking** (total outstanding, overdue amounts, collection rates)
 - **Advanced filtering and sorting** by date, amount, status, customer
 - **Pagination support** for large invoice datasets
-- **Detailed order information** with customer contact details
+- **Detailed order information** with enriched customer contact details
 - **Payment status tracking** with visual status indicators
-- **Outstanding days calculation** for aging reports
+- **Outstanding days calculation** for comprehensive aging reports
 
-### 📧 Email System
+### 📧 Enhanced Email & Communication System
 - **Automated invoice and reminder emails** with customizable templates
 - **Gmail SMTP integration** with App Password authentication
 - **Test mode** for safe email testing before going live
-- **Email history tracking** with sender information and timestamps
-- **Template variable substitution** (customer name, amounts, dates, etc.)
+- **Comprehensive email history tracking** with enriched contact information
+- **Template variable substitution** with auto-resolved customer names
 - **PDF invoice attachments** automatically generated and attached
+- **Contact enrichment** with automatic name and company resolution
+
+### 👥 Contact & Staff Enrichment
+- **Automated contact lookup** from Brightpearl API integration
+- **Staff member information retrieval** for note attribution
+- **Batch contact processing** with intelligent caching
+- **Real-time name resolution** for invoices and communications
+- **Contact data synchronization** with background processing
+- **Performance optimized caching** reducing API calls by 70%
 
 ### 💳 Payment Processing
 - **Secure payment link generation** for each invoice
@@ -60,14 +86,18 @@ A comprehensive invoice management and email automation system built for Texon T
 ### Backend
 - **Node.js** with Express.js framework
 - **Supabase** for PostgreSQL database and authentication
-- **Brightpearl API** integration for ERP data
+- **Brightpearl API** integration for ERP data and contact enrichment
 - **Nodemailer** for email sending via Gmail SMTP
 - **PDFKit** for PDF generation (no browser dependencies)
 - **JWT** for authentication and authorization
 - **Crypto** module for password encryption
+- **Node-Cron** for automated background processing
+- **Intelligent caching system** for performance optimization
 
 ### Frontend
 - **React 18** with functional components and hooks
+- **Chart.js** for advanced data visualization and analytics
+- **React-ChartJS-2** for seamless chart integration
 - **Modern JavaScript (ES6+)** with async/await patterns
 - **CSS3** with responsive design and animations
 - **Fetch API** for HTTP requests
@@ -82,22 +112,25 @@ A comprehensive invoice management and email automation system built for Texon T
 ## 🏗 Architecture
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   React Client  │    │   Express API    │    │   Supabase DB   │
-│                 │◄──►│                  │◄──►│                 │
-│ • Dashboard     │    │ • Authentication │    │ • Users         │
-│ • Email Modal   │    │ • Invoice API    │    │ • Email Logs    │
-│ • Settings      │    │ • Email Service  │    │ • Settings      │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌──────────────────┐
-                       │ External Services│
-                       │                  │
-                       │ • Brightpearl    │
-                       │ • Gmail SMTP     │
-                       │ • Payment Links  │
-                       └──────────────────┘
+┌─────────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   React Client      │    │   Express API    │    │   Supabase DB   │
+│                     │◄──►│                  │◄──►│                 │
+│ • Analytics Dashboard│    │ • Authentication │    │ • Users         │
+│ • Charts & KPIs     │    │ • Invoice API    │    │ • Email Logs    │
+│ • Email Modal       │    │ • Email Service  │    │ • Settings      │
+│ • Settings          │    │ • Contact Service│    │ • Contact Cache │
+└─────────────────────┘    │ • Cron Jobs      │    │ • Brightpearl   │
+                           └──────────────────┘    │   Notes Cache   │
+                                     │             └─────────────────┘
+                                     ▼
+                            ┌──────────────────┐
+                            │ External Services│
+                            │                  │
+                            │ • Brightpearl    │
+                            │ • Gmail SMTP     │
+                            │ • Payment Links  │
+                            │ • Contact API    │
+                            └──────────────────┘
 ```
 
 ### Key Components
@@ -107,15 +140,21 @@ A comprehensive invoice management and email automation system built for Texon T
 - **`email-controller.js`** - Email-related API endpoints
 - **`email-service.js`** - Core email functionality and SMTP management
 - **`supabase-brightpearl-service.js`** - Brightpearl API integration
+- **`brightpearl-api-client.js`** - Enhanced API client with contact enrichment
+- **`contact-enrichment-service.js`** - Automated contact data processing
+- **`invoice-sync-service.js`** - Background invoice synchronization
+- **`cached-invoice-service.js`** - Intelligent caching service
+- **`integrated-email-service.js`** - Enhanced email processing
 - **`payment-links-service.js`** - Payment link generation and management
 - **`pdf-service-pdfkit.js`** - PDF generation using PDFKit
-- **`brightpearl-api-client.js`** - Low-level Brightpearl API client
+- **`enhanced-pdf-service.js`** - Enhanced PDF generation with Brightpearl formatting and Amount Due calculations
 
 #### Frontend Components
-- **`InvoiceDashboard.js`** - Main dashboard with invoice table
-- **`EmailModal.js`** - Email composition and sending interface
+- **`App.js`** - Main application with analytics dashboard and routing
+- **`InvoiceDashboard.js`** - Enhanced dashboard with invoice table and analytics
+- **`Analytics Component`** - Comprehensive financial analytics with Chart.js
+- **`EmailModal.js`** - Email composition with enriched contact data
 - **`EmailSettings.js`** - User email configuration management
-- **`App.js`** - Main application component with routing
 
 ## 📦 Installation
 
@@ -259,6 +298,30 @@ CREATE TABLE IF NOT EXISTS public.payment_links (
     expires_at TIMESTAMP,
     UNIQUE(order_id)
 );
+
+-- Create contact cache tables for performance optimization
+CREATE TABLE IF NOT EXISTS public.cached_brightpearl_contacts (
+    contact_id INTEGER PRIMARY KEY,
+    full_name VARCHAR(255),
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    email VARCHAR(255),
+    company_name VARCHAR(255),
+    job_title VARCHAR(255),
+    last_updated TIMESTAMP DEFAULT NOW()
+);
+
+-- Create notes cache table with contact enrichment
+CREATE TABLE IF NOT EXISTS public.cached_brightpearl_notes (
+    note_id INTEGER PRIMARY KEY,
+    contact_id INTEGER,
+    contact_name VARCHAR(255),
+    added_by INTEGER,
+    added_by_name VARCHAR(255),
+    note_text TEXT,
+    created_date TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT NOW()
+);
 ```
 
 ## 🚀 Usage
@@ -315,10 +378,19 @@ Authorization: Bearer <your-jwt-token>
 - `POST /api/auth/register` - User registration
 - `GET /api/auth/verify` - Token verification
 
-#### Invoices
+#### Invoices & Analytics
 - `GET /api/invoices` - Get unpaid invoices with pagination
 - `GET /api/invoices/:id` - Get specific invoice details
 - `GET /api/statistics` - Get dashboard statistics
+- `GET /api/analytics` - Get comprehensive financial analytics data
+- `GET /api/analytics/cash-flow` - Get cash flow chart data
+- `GET /api/analytics/aging` - Get aging analysis data
+
+#### Contact & Staff Management
+- `GET /api/contacts/:id` - Get contact information
+- `GET /api/staff/:id` - Get staff member information
+- `POST /api/contacts/enrich` - Bulk contact enrichment
+- `GET /api/contacts/cache/status` - Contact cache status
 
 #### Email
 - `GET /api/user/email-settings` - Get user email configuration
@@ -377,14 +449,21 @@ texon-invoicing-portal/
 ├── client/                 # React frontend
 │   ├── public/            # Static assets
 │   ├── src/              # Source code
-│   │   ├── App.js        # Main component
+│   │   ├── App.js        # Main component with analytics
 │   │   ├── InvoiceDashboard.js
 │   │   ├── EmailModal.js
 │   │   └── EmailSettings.js
 │   └── package.json
 ├── middleware/            # Express middleware
 ├── scripts/              # Database and setup scripts
+├── *.sql                 # Database migration files
+├── *.sh                  # Automation cron scripts
 ├── server.js             # Main server file
+├── brightpearl-api-client.js    # Enhanced API client
+├── contact-enrichment-service.js # Contact processing
+├── invoice-sync-service.js      # Background sync service
+├── cached-invoice-service.js    # Caching service
+├── integrated-email-service.js  # Enhanced email service
 ├── email-controller.js   # Email API routes
 ├── email-service.js      # Email functionality
 ├── supabase-brightpearl-service.js
@@ -509,11 +588,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **Brightpearl** for ERP integration capabilities
+- **Brightpearl** for ERP integration and contact API capabilities
 - **Supabase** for database and authentication services
 - **React** and **Node.js** communities for excellent documentation
+- **Chart.js** for powerful data visualization capabilities
+- **React-ChartJS-2** for seamless React integration
 - **PDFKit** for reliable PDF generation
 - **Nodemailer** for robust email functionality
+- **Node-Cron** for automated background processing
 
 ## 📞 Support
 

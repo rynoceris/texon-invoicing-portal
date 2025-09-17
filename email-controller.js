@@ -1,5 +1,6 @@
 const EmailService = require('./email-service');
 const PDFKitService = require('./pdf-service-pdfkit');
+const EnhancedPDFService = require('./enhanced-pdf-service');
 const PaymentLinksService = require('./payment-links-service');
 const SupabaseBrightpearlService = require('./supabase-brightpearl-service');
 
@@ -10,9 +11,10 @@ class EmailController {
     constructor() {
         this.emailService = new EmailService();
         this.pdfService = new PDFKitService();
+        this.enhancedPdfService = new EnhancedPDFService();
         this.paymentLinksService = new PaymentLinksService();
         this.brightpearlService = new SupabaseBrightpearlService();
-        console.log('✅ Email Controller initialized with PDFKit');
+        console.log('✅ Email Controller initialized with Enhanced PDF Service');
     }
 
     /**
@@ -164,17 +166,17 @@ class EmailController {
                 orderRef: orderData.orderRef
             };
 
-            // 4. Generate PDF using PDFKit (no browser dependencies)
-            console.log('📄 Generating PDF invoice with PDFKit...');
+            // 4. Generate PDF using Enhanced PDF Service with Brightpearl template
+            console.log('📄 Generating PDF invoice with Enhanced PDF Service...');
             console.log('📊 PDF Order Data:', JSON.stringify(pdfOrderData, null, 2));
-            const pdfResult = await this.pdfService.generateInvoicePDF(pdfOrderData);
+            const pdfResult = await this.enhancedPdfService.generateInvoicePDF(pdfOrderData);
             if (!pdfResult.success) {
                 return res.status(500).json({ error: 'Failed to generate PDF: ' + pdfResult.error });
             }
 
             // 5. Prepare email attachments
             const attachments = [
-                this.pdfService.createEmailAttachment(pdfResult.buffer, pdfResult.filename)
+                this.enhancedPdfService.createEmailAttachment(pdfResult.buffer, pdfResult.filename)
             ];
 
             // 6. Send email
@@ -208,8 +210,8 @@ class EmailController {
             console.error('❌ Error sending email:', error);
             res.status(500).json({ error: 'Internal server error' });
         } finally {
-            // Clean up PDF service
-            await this.pdfService.closeBrowser();
+            // Clean up PDF services
+            await this.enhancedPdfService.closeBrowser();
         }
     }
 
