@@ -141,6 +141,21 @@ const IntegratedEmailService = require('./integrated-email-service');
 const emailController = new EmailController();
 const integratedEmailService = new IntegratedEmailService();
 
+// Initialize Automated Email Services with error handling
+let automatedEmailController = null;
+let emailScheduler = null;
+
+try {
+    const AutomatedEmailController = require('./automated-email-controller');
+    const EmailScheduler = require('./email-scheduler');
+    automatedEmailController = new AutomatedEmailController();
+    emailScheduler = new EmailScheduler();
+    console.log('✅ Automated Email Services initialized');
+} catch (error) {
+    console.warn('⚠️ Automated Email Services not available:', error.message);
+    console.warn('   This is normal if environment variables are not configured');
+}
+
 console.log('✅ Services initialized');
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -362,29 +377,43 @@ app.post('/texon-invoicing-portal/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         console.log('🔐 Login attempt for username:', username);
-
+        console.log('🔐 Password provided:', !!password);
+    
         if (!username || !password) {
+            console.log('❌ Missing username or password');
             return res.status(400).json({ error: 'Username and password required' });
         }
-
-        // Enhanced user selection to include new fields
-        const { data: user, error } = await supabaseService
+    
+        // Enhanced user selection to include new fields - search by email OR username
+        console.log('🔍 Searching for user...');
+        const { data: users, error } = await supabaseService
             .from('app_users')
             .select('*')
-            .eq('username', username)
-            .single();
-
-        if (error || !user) {
+            .or(`username.eq.${username},email.eq.${username}`);
+    
+        console.log('🔍 Database query error:', error);
+        console.log('🔍 Users found:', users ? users.length : 0);
+    
+        if (error || !users || users.length === 0) {
+            console.log('❌ User not found or database error');
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-
+    
+        const user = users[0];
+        console.log('✅ User found:', user.email, 'Active:', user.is_active);
+    
         // Check if user is active
         if (!user.is_active) {
+            console.log('❌ User account is deactivated');
             return res.status(401).json({ error: 'Account is deactivated' });
         }
-
+    
+        console.log('🔑 Testing password...');
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        console.log('🔑 Password valid:', isValidPassword);
+    
         if (!isValidPassword) {
+            console.log('❌ Password validation failed');
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -3086,6 +3115,185 @@ app.post('/texon-invoicing-portal/api/send-invoice-email', authenticateToken, as
         }
     } catch (error) {
         console.error('❌ Error in send invoice email route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ===== AUTOMATED EMAIL SYSTEM API =====
+
+// Run automated email campaign manually
+app.post('/texon-invoicing-portal/api/automated-emails/run', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.runAutomation(req, res);
+    } catch (error) {
+        console.error('❌ Error in automated email run route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get automation statistics
+app.get('/texon-invoicing-portal/api/automated-emails/stats', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.getAutomationStats(req, res);
+    } catch (error) {
+        console.error('❌ Error in automation stats route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get active email campaigns
+app.get('/texon-invoicing-portal/api/automated-emails/campaigns', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.getCampaigns(req, res);
+    } catch (error) {
+        console.error('❌ Error in get campaigns route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update campaign (enable/disable)
+app.put('/texon-invoicing-portal/api/automated-emails/campaigns/:id', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.updateCampaign(req, res);
+    } catch (error) {
+        console.error('❌ Error in update campaign route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get scheduled emails
+app.get('/texon-invoicing-portal/api/automated-emails/scheduled', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.getScheduledEmails(req, res);
+    } catch (error) {
+        console.error('❌ Error in get scheduled emails route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get automation logs
+app.get('/texon-invoicing-portal/api/automated-emails/logs', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.getAutomationLogs(req, res);
+    } catch (error) {
+        console.error('❌ Error in get automation logs route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Preview what emails would be sent
+app.get('/texon-invoicing-portal/api/automated-emails/preview', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.previewAutomation(req, res);
+    } catch (error) {
+        console.error('❌ Error in automation preview route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Customer opt-out management
+app.post('/texon-invoicing-portal/api/automated-emails/opt-out', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.addOptOut(req, res);
+    } catch (error) {
+        console.error('❌ Error in add opt-out route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/texon-invoicing-portal/api/automated-emails/opt-out', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.removeOptOut(req, res);
+    } catch (error) {
+        console.error('❌ Error in remove opt-out route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/texon-invoicing-portal/api/automated-emails/opt-outs', authenticateToken, async (req, res) => {
+    try {
+        await automatedEmailController.getOptOuts(req, res);
+    } catch (error) {
+        console.error('❌ Error in get opt-outs route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Scheduler management endpoints
+app.get('/texon-invoicing-portal/api/automated-emails/scheduler/status', authenticateToken, async (req, res) => {
+    try {
+        if (!emailScheduler) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails',
+                scheduler: {
+                    isRunning: false,
+                    activeJobs: [],
+                    nextRun: null
+                },
+                systemHealth: {
+                    healthy: false,
+                    database: 'not_configured',
+                    email: 'not_configured',
+                    scheduler: 'not_available'
+                }
+            });
+        }
+
+        const status = emailScheduler.getStatus();
+        const health = await emailScheduler.checkSystemHealth();
+
+        res.json({
+            success: true,
+            scheduler: status,
+            systemHealth: health
+        });
+    } catch (error) {
+        console.error('❌ Error getting scheduler status:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/texon-invoicing-portal/api/automated-emails/scheduler/start', authenticateToken, async (req, res) => {
+    try {
+        if (!emailScheduler) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        emailScheduler.start();
+        res.json({
+            success: true,
+            message: 'Email scheduler started successfully'
+        });
+    } catch (error) {
+        console.error('❌ Error starting scheduler:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/texon-invoicing-portal/api/automated-emails/scheduler/stop', authenticateToken, async (req, res) => {
+    try {
+        if (!emailScheduler) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        emailScheduler.stop();
+        res.json({
+            success: true,
+            message: 'Email scheduler stopped successfully'
+        });
+    } catch (error) {
+        console.error('❌ Error stopping scheduler:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

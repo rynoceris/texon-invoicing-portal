@@ -1,0 +1,626 @@
+const { createClient } = require('@supabase/supabase-js');
+const EmailService = require('./email-service');
+const SafetyMechanisms = require('./safety-mechanisms');
+
+/**
+ * Automated Email Service for overdue invoice notifications
+ * Handles scheduling and sending of automated reminder emails based on tax_date
+ */
+class AutomatedEmailService {
+    constructor() {
+        // App database connection
+        this.supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_KEY,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
+
+        // Brightpearl data database connection (using existing env var names)
+        this.supabaseBrightpearl = createClient(
+            process.env.BRIGHTPEARL_DATA_SUPABASE_URL,
+            process.env.BRIGHTPEARL_DATA_SUPABASE_SERVICE_KEY,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
+
+        this.emailService = new EmailService();
+        this.safetyMechanisms = new SafetyMechanisms();
+        console.log('✅ Automated Email Service initialized');
+    }
+
+    /**
+     * Main automation runner - analyzes all overdue invoices and schedules emails
+     */
+    async runAutomation(triggeredBy = 'scheduler', testMode = false) {
+        let logId;
+
+        try {
+            console.log(`🚀 Starting automated email run (${triggeredBy})${testMode ? ' [TEST MODE]' : ''}`);
+
+            // Validate automation run with safety checks
+            const validation = await this.safetyMechanisms.validateAutomationRun(testMode);
+
+            if (!validation.isValid) {
+                console.error('❌ Automation run blocked by safety mechanisms:');
+                validation.issues.forEach(issue => console.error(`   - ${issue}`));
+
+                return {
+                    success: false,
+                    error: 'Automation blocked by safety mechanisms',
+                    issues: validation.issues
+                };
+            }
+
+            if (validation.warnings.length > 0) {
+                console.warn('⚠️ Automation warnings:');
+                validation.warnings.forEach(warning => console.warn(`   - ${warning}`));
+            }
+
+            // Start automation log
+            logId = await this.createAutomationLog(triggeredBy);
+
+            // Get active campaigns
+            const campaigns = await this.getActiveCampaigns();
+            if (!campaigns.length) {
+                console.log('⚠️ No active email campaigns found');
+                await this.updateAutomationLog(logId, 'completed', 0, 0, 0, 0, 0);
+                return { success: true, message: 'No active campaigns' };
+            }
+
+            console.log(`📋 Found ${campaigns.length} active campaigns`);
+
+            let totalProcessed = 0;
+            let totalScheduled = 0;
+            let totalSent = 0;
+            let totalFailed = 0;
+            let totalSkipped = 0;
+
+            // Process each campaign
+            for (const campaign of campaigns) {
+                console.log(`\n📧 Processing campaign: ${campaign.campaign_name} (${campaign.trigger_days} days)`);
+
+                const result = await this.processCampaign(campaign, testMode);
+
+                totalProcessed += result.processed;
+                totalScheduled += result.scheduled;
+                totalSent += result.sent;
+                totalFailed += result.failed;
+                totalSkipped += result.skipped;
+            }
+
+            // Process scheduled emails (send any pending emails due today)
+            console.log('\n📬 Processing scheduled emails for today...');
+            const scheduleResult = await this.processScheduledEmails(testMode);
+
+            totalSent += scheduleResult.sent;
+            totalFailed += scheduleResult.failed;
+            totalSkipped += scheduleResult.skipped;
+
+            // Complete automation log
+            await this.updateAutomationLog(
+                logId,
+                'completed',
+                totalProcessed,
+                totalScheduled,
+                totalSent,
+                totalFailed,
+                totalSkipped
+            );
+
+            console.log(`\n✅ Automation completed successfully:`);
+            console.log(`   Orders processed: ${totalProcessed}`);
+            console.log(`   Emails scheduled: ${totalScheduled}`);
+            console.log(`   Emails sent: ${totalSent}`);
+            console.log(`   Emails failed: ${totalFailed}`);
+            console.log(`   Emails skipped: ${totalSkipped}`);
+
+            return {
+                success: true,
+                summary: {
+                    ordersProcessed: totalProcessed,
+                    emailsScheduled: totalScheduled,
+                    emailsSent: totalSent,
+                    emailsFailed: totalFailed,
+                    emailsSkipped: totalSkipped
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ Automation run failed:', error);
+
+            if (logId) {
+                await this.updateAutomationLog(logId, 'failed', 0, 0, 0, 0, 0, 1, error.message);
+            }
+
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Process a specific campaign - find eligible invoices and schedule emails
+     */
+    async processCampaign(campaign, testMode = false) {
+        try {
+            // Calculate cutoff date for this campaign
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - campaign.trigger_days);
+
+            console.log(`   📅 Looking for invoices with tax_date <= ${cutoffDate.toISOString().split('T')[0]}`);
+
+            // Find eligible overdue invoices
+            const { data: overdueInvoices, error } = await this.supabaseBrightpearl
+                .from('cached_invoices')
+                .select(`
+                    id,
+                    order_reference,
+                    invoice_number,
+                    tax_date,
+                    total_amount,
+                    paid_amount,
+                    outstanding_amount,
+                    billing_contact_email,
+                    billing_contact_name,
+                    billing_company_name,
+                    days_outstanding
+                `)
+                .lte('tax_date', cutoffDate.toISOString())
+                .gt('outstanding_amount', 0) // Only invoices with outstanding balance
+                .not('billing_contact_email', 'is', null) // Must have email
+                .order('tax_date', { ascending: true });
+
+            if (error) throw error;
+
+            console.log(`   📊 Found ${overdueInvoices?.length || 0} potentially eligible invoices`);
+
+            if (!overdueInvoices?.length) {
+                return { processed: 0, scheduled: 0, sent: 0, failed: 0, skipped: 0 };
+            }
+
+            let processed = 0;
+            let scheduled = 0;
+            let skipped = 0;
+
+            for (const invoice of overdueInvoices) {
+                processed++;
+
+                // Calculate actual days outstanding
+                const taxDate = new Date(invoice.tax_date);
+                const today = new Date();
+                const daysOutstanding = Math.floor((today - taxDate) / (1000 * 60 * 60 * 24));
+
+                // Check if this invoice is in the right range for this campaign
+                const isEligible = this.isInvoiceEligibleForCampaign(daysOutstanding, campaign);
+
+                if (!isEligible) {
+                    skipped++;
+                    continue;
+                }
+
+                // Check if email already scheduled/sent for this campaign
+                const alreadyScheduled = await this.isEmailAlreadyScheduled(
+                    campaign.id,
+                    invoice.id,
+                    campaign.send_frequency === 'recurring' ? daysOutstanding : null
+                );
+
+                if (alreadyScheduled) {
+                    console.log(`   ⏭️  Skipping order ${invoice.order_reference} - already scheduled`);
+                    skipped++;
+                    continue;
+                }
+
+                // Check customer opt-out preferences
+                const isOptedOut = await this.isCustomerOptedOut(invoice.billing_contact_email);
+                if (isOptedOut) {
+                    console.log(`   🚫 Skipping order ${invoice.order_reference} - customer opted out`);
+                    await this.scheduleEmail({
+                        campaignId: campaign.id,
+                        orderId: invoice.id,
+                        recipientEmail: invoice.billing_contact_email,
+                        scheduledDate: new Date(),
+                        status: 'skipped',
+                        skipReason: 'customer_opted_out'
+                    });
+                    skipped++;
+                    continue;
+                }
+
+                // Schedule the email
+                const scheduleDate = new Date(); // Send today
+                await this.scheduleEmail({
+                    campaignId: campaign.id,
+                    orderId: invoice.id,
+                    recipientEmail: invoice.billing_contact_email,
+                    scheduledDate: scheduleDate
+                });
+
+                console.log(`   📧 Scheduled email for order ${invoice.order_reference} (${daysOutstanding} days overdue)`);
+                scheduled++;
+
+                // If in test mode, limit to 5 emails per campaign
+                if (testMode && scheduled >= 5) {
+                    console.log(`   🧪 Test mode: limiting to ${scheduled} emails for this campaign`);
+                    break;
+                }
+            }
+
+            return { processed, scheduled, sent: 0, failed: 0, skipped };
+
+        } catch (error) {
+            console.error(`❌ Error processing campaign ${campaign.campaign_name}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if an invoice is eligible for a specific campaign based on days outstanding
+     */
+    isInvoiceEligibleForCampaign(daysOutstanding, campaign) {
+        switch (campaign.campaign_type) {
+            case 'overdue_31_60':
+                return daysOutstanding >= 31 && daysOutstanding <= 60;
+
+            case 'overdue_61_90':
+                return daysOutstanding >= 61 && daysOutstanding <= 90;
+
+            case 'overdue_91_plus':
+                return daysOutstanding >= 91 && campaign.send_frequency === 'once';
+
+            case 'overdue_91_plus_recurring':
+                // For recurring 91+ day emails, send every 10 days starting at day 101
+                if (daysOutstanding < 101) return false;
+                const daysSince91 = daysOutstanding - 91;
+                return daysSince91 % (campaign.recurring_interval_days || 10) === 0;
+
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Process scheduled emails that are due today
+     */
+    async processScheduledEmails(testMode = false) {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+
+            // Get all pending emails scheduled for today
+            const { data: scheduledEmails, error } = await this.supabase
+                .from('automated_email_schedule')
+                .select(`
+                    *,
+                    automated_email_campaigns!inner (
+                        campaign_name,
+                        template_type
+                    )
+                `)
+                .eq('scheduled_date', today)
+                .eq('status', 'pending')
+                .lt('attempt_count', 3) // Don't retry more than 3 times
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            console.log(`📬 Found ${scheduledEmails?.length || 0} emails scheduled for today`);
+
+            if (!scheduledEmails?.length) {
+                return { sent: 0, failed: 0, skipped: 0 };
+            }
+
+            let sent = 0;
+            let failed = 0;
+            let skipped = 0;
+
+            // Get a default user for sending emails (you may want to make this configurable)
+            const defaultUser = await this.getDefaultEmailUser();
+            if (!defaultUser) {
+                console.error('❌ No default email user configured for automated emails');
+                return { sent: 0, failed: scheduledEmails.length, skipped: 0 };
+            }
+
+            for (const scheduledEmail of scheduledEmails) {
+                try {
+                    // Update attempt count
+                    await this.updateScheduledEmailAttempt(scheduledEmail.id);
+
+                    // Get invoice data for email variables
+                    const invoiceData = await this.getInvoiceData(scheduledEmail.order_id);
+                    if (!invoiceData) {
+                        console.log(`⚠️ Invoice data not found for order ${scheduledEmail.order_id}`);
+                        await this.updateScheduledEmailStatus(scheduledEmail.id, 'skipped', 'invoice_not_found');
+                        skipped++;
+                        continue;
+                    }
+
+                    // Check if invoice is still outstanding
+                    if (invoiceData.outstanding_amount <= 0) {
+                        console.log(`💰 Invoice ${invoiceData.order_reference} has been paid - skipping email`);
+                        await this.updateScheduledEmailStatus(scheduledEmail.id, 'skipped', 'invoice_paid');
+                        skipped++;
+                        continue;
+                    }
+
+                    // Send the email
+                    const emailResult = await this.emailService.sendEmail({
+                        userId: defaultUser.id,
+                        orderId: scheduledEmail.order_id,
+                        recipientEmail: scheduledEmail.recipient_email,
+                        emailType: scheduledEmail.automated_email_campaigns.template_type,
+                        orderData: {
+                            customerName: invoiceData.billing_contact_name,
+                            reference: invoiceData.order_reference,
+                            invoiceNumber: invoiceData.invoice_number,
+                            totalAmount: invoiceData.total_amount,
+                            totalPaid: invoiceData.paid_amount,
+                            amountDue: invoiceData.outstanding_amount,
+                            daysOutstanding: invoiceData.days_outstanding,
+                            taxDate: new Date(invoiceData.tax_date).toLocaleDateString(),
+                            payments: [] // You may want to fetch payment history
+                        },
+                        senderName: defaultUser.first_name ? `${defaultUser.first_name} ${defaultUser.last_name}` : 'Texon Towel'
+                    });
+
+                    if (emailResult.success) {
+                        // Update scheduled email as sent
+                        await this.updateScheduledEmailStatus(
+                            scheduledEmail.id,
+                            'sent',
+                            null,
+                            new Date(),
+                            emailResult.logId
+                        );
+
+                        console.log(`✅ Sent automated email for order ${invoiceData.order_reference}`);
+                        sent++;
+                    } else {
+                        throw new Error(emailResult.error);
+                    }
+
+                    // If in test mode, limit sends
+                    if (testMode && sent >= 5) {
+                        console.log(`🧪 Test mode: limiting to ${sent} sent emails`);
+                        break;
+                    }
+
+                } catch (emailError) {
+                    console.error(`❌ Failed to send scheduled email ${scheduledEmail.id}:`, emailError);
+
+                    await this.updateScheduledEmailStatus(
+                        scheduledEmail.id,
+                        'failed',
+                        null,
+                        null,
+                        null,
+                        emailError.message
+                    );
+                    failed++;
+                }
+            }
+
+            return { sent, failed, skipped };
+
+        } catch (error) {
+            console.error('❌ Error processing scheduled emails:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get active email campaigns
+     */
+    async getActiveCampaigns() {
+        const { data, error } = await this.supabase
+            .from('automated_email_campaigns')
+            .select('*')
+            .eq('is_active', true)
+            .order('trigger_days', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    }
+
+    /**
+     * Create automation log entry
+     */
+    async createAutomationLog(triggeredBy) {
+        const { data, error } = await this.supabase
+            .from('email_automation_logs')
+            .insert({
+                triggered_by: triggeredBy,
+                status: 'running'
+            })
+            .select('id')
+            .single();
+
+        if (error) throw error;
+        return data.id;
+    }
+
+    /**
+     * Update automation log
+     */
+    async updateAutomationLog(logId, status, processed = 0, scheduled = 0, sent = 0, failed = 0, skipped = 0, errors = 0, errorDetails = null) {
+        const { error } = await this.supabase
+            .from('email_automation_logs')
+            .update({
+                run_completed_at: new Date().toISOString(),
+                total_orders_processed: processed,
+                emails_scheduled: scheduled,
+                emails_sent: sent,
+                emails_failed: failed,
+                emails_skipped: skipped,
+                errors_encountered: errors,
+                error_details: errorDetails,
+                status: status
+            })
+            .eq('id', logId);
+
+        if (error) throw error;
+    }
+
+    /**
+     * Check if email is already scheduled for a campaign/order combination
+     */
+    async isEmailAlreadyScheduled(campaignId, orderId, daysOutstanding = null) {
+        let query = this.supabase
+            .from('automated_email_schedule')
+            .select('id')
+            .eq('campaign_id', campaignId)
+            .eq('order_id', orderId)
+            .in('status', ['pending', 'sent']);
+
+        // For recurring campaigns, check if we already sent for this specific day range
+        if (daysOutstanding !== null) {
+            const scheduledDate = new Date().toISOString().split('T')[0];
+            query = query.eq('scheduled_date', scheduledDate);
+        }
+
+        const { data, error } = await query.limit(1);
+
+        if (error) throw error;
+        return data && data.length > 0;
+    }
+
+    /**
+     * Check if customer has opted out of automated emails
+     */
+    async isCustomerOptedOut(email) {
+        const { data, error } = await this.supabase
+            .from('customer_email_preferences')
+            .select('opted_out_all, opted_out_reminders')
+            .eq('email_address', email.toLowerCase())
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+
+        if (!data) return false;
+        return data.opted_out_all || data.opted_out_reminders;
+    }
+
+    /**
+     * Schedule an email
+     */
+    async scheduleEmail({ campaignId, orderId, recipientEmail, scheduledDate, status = 'pending', skipReason = null }) {
+        const { error } = await this.supabase
+            .from('automated_email_schedule')
+            .insert({
+                campaign_id: campaignId,
+                order_id: orderId,
+                recipient_email: recipientEmail.toLowerCase(),
+                scheduled_date: scheduledDate.toISOString().split('T')[0],
+                status: status,
+                skip_reason: skipReason
+            });
+
+        if (error) throw error;
+    }
+
+    /**
+     * Update scheduled email attempt count
+     */
+    async updateScheduledEmailAttempt(scheduleId) {
+        const { error } = await this.supabase
+            .from('automated_email_schedule')
+            .update({
+                attempt_count: this.supabase.raw('attempt_count + 1'),
+                last_attempt_at: new Date().toISOString()
+            })
+            .eq('id', scheduleId);
+
+        if (error) throw error;
+    }
+
+    /**
+     * Update scheduled email status
+     */
+    async updateScheduledEmailStatus(scheduleId, status, skipReason = null, sentAt = null, emailLogId = null, errorMessage = null) {
+        const updateData = {
+            status: status,
+            updated_at: new Date().toISOString()
+        };
+
+        if (skipReason) updateData.skip_reason = skipReason;
+        if (sentAt) updateData.sent_at = sentAt.toISOString();
+        if (emailLogId) updateData.email_log_id = emailLogId;
+        if (errorMessage) updateData.error_message = errorMessage;
+
+        const { error } = await this.supabase
+            .from('automated_email_schedule')
+            .update(updateData)
+            .eq('id', scheduleId);
+
+        if (error) throw error;
+    }
+
+    /**
+     * Get invoice data for email variables
+     */
+    async getInvoiceData(orderId) {
+        const { data, error } = await this.supabaseBrightpearl
+            .from('cached_invoices')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+
+        if (error) return null;
+        return data;
+    }
+
+    /**
+     * Get default user for sending automated emails
+     * You may want to configure this or allow multiple users
+     */
+    async getDefaultEmailUser() {
+        const { data, error } = await this.supabase
+            .from('app_users')
+            .select('id, first_name, last_name, email')
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+
+        if (error) return null;
+        return data;
+    }
+
+    /**
+     * Get automation statistics
+     */
+    async getAutomationStats(days = 30) {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+
+        const { data, error } = await this.supabase
+            .from('email_automation_logs')
+            .select('*')
+            .gte('run_started_at', startDate.toISOString())
+            .order('run_started_at', { ascending: false });
+
+        if (error) throw error;
+
+        const stats = {
+            totalRuns: data.length,
+            successfulRuns: data.filter(log => log.status === 'completed').length,
+            failedRuns: data.filter(log => log.status === 'failed').length,
+            totalEmailsSent: data.reduce((sum, log) => sum + (log.emails_sent || 0), 0),
+            totalEmailsFailed: data.reduce((sum, log) => sum + (log.emails_failed || 0), 0),
+            totalEmailsScheduled: data.reduce((sum, log) => sum + (log.emails_scheduled || 0), 0),
+            recentLogs: data.slice(0, 10)
+        };
+
+        return stats;
+    }
+}
+
+module.exports = AutomatedEmailService;

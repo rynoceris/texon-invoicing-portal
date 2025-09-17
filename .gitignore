@@ -2,3 +2,12 @@
 *.log
 *.tmp
 .htaccess
+
+# Automated email system temporary files
+server.log
+test-*.js
+*-test.js
+browser-console-test.js
+authenticated-browser-test.js
+check-automation-status.md
+
