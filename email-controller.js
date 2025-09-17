@@ -139,6 +139,7 @@ class EmailController {
             }
 
             console.log(`📧 Processing ${emailType} email for order ${orderId}...`);
+            
 
             // 1. Get order data
             const orderDetails = await this.brightpearlService.getOrderDetails(orderId);
@@ -148,25 +149,36 @@ class EmailController {
 
             const orderData = orderDetails.data;
 
-            // 2. Generate/get payment link
+            // 2. Get payment data using Enhanced PDF Service method
+            const paymentData = await this.enhancedPdfService.getPaymentData(orderId);
+            
+            // 3. Generate/get payment link
             let paymentLink = null;
             const paymentLinkResult = await this.paymentLinksService.generatePaymentLink(orderId);
             if (paymentLinkResult.success) {
                 paymentLink = paymentLinkResult.data.paymentLink;
             }
 
-            // 3. Prepare order data for PDF
+            // 4. Calculate payment totals and amount due
+            const totalAmount = parseFloat(orderData.totalAmount || orderData.total || 0);
+            const totalPaid = paymentData.totalPaid || 0;
+            const amountDue = Math.max(0, totalAmount - totalPaid);
+
+            // 5. Prepare order data for PDF and email
             const pdfOrderData = {
                 ...orderData,
                 paymentLink: paymentLink,
                 customerName: orderData.billingContact?.name || orderData.customer?.name || orderData.customerName,
                 invoiceNumber: orderData.invoiceReference || `ORDER-${orderId}`,
-                totalAmount: orderData.totalAmount || orderData.total,
+                totalAmount: totalAmount,
+                totalPaid: totalPaid,
+                amountDue: amountDue,
+                payments: paymentData.payments || [],
                 orderDate: orderData.orderDate,
                 orderRef: orderData.orderRef
             };
 
-            // 4. Generate PDF using Enhanced PDF Service with Brightpearl template
+            // 6. Generate PDF using Enhanced PDF Service with Brightpearl template
             console.log('📄 Generating PDF invoice with Enhanced PDF Service...');
             console.log('📊 PDF Order Data:', JSON.stringify(pdfOrderData, null, 2));
             const pdfResult = await this.enhancedPdfService.generateInvoicePDF(pdfOrderData);
@@ -180,18 +192,64 @@ class EmailController {
             ];
 
             // 6. Send email
+            const emailOrderData = {
+                ...pdfOrderData,
+                paymentLink: paymentLink
+            };
+
+            // Debug: Log what we're sending to email service
+            console.log('🔍 Email Controller Debug - Email Order Data:');
+            console.log('  totalAmount:', emailOrderData.totalAmount);
+            console.log('  totalPaid:', emailOrderData.totalPaid);
+            console.log('  amountDue:', emailOrderData.amountDue);
+            console.log('  payments:', emailOrderData.payments ? `${emailOrderData.payments.length} payments` : 'undefined');
+
+            // Apply template replacement to custom subject and body
+            const formatPaymentHistory = (payments) => {
+                if (!payments || payments.length === 0) {
+                    return 'No payments recorded.';
+                }
+                return payments.map(payment => {
+                    const date = new Date(payment.paymentdate).toLocaleDateString();
+                    const amount = parseFloat(payment.amountpaid || 0).toFixed(2);
+                    const method = payment.paymentmethodcode || 'Other';
+                    return `• ${date}: $${amount} (${method})`;
+                }).join('\n');
+            };
+
+            const templateVars = {
+                ORDER_ID: orderId.toString(),
+                CUSTOMER_NAME: emailOrderData.customerName || 'Valued Customer',
+                COMPANY_NAME: 'Texon Towel',
+                SENDER_NAME: userName,
+                ORDER_REFERENCE: emailOrderData.reference || '',
+                INVOICE_NUMBER: emailOrderData.invoiceNumber || '',
+                TOTAL_AMOUNT: '$' + (emailOrderData.totalAmount || 0).toFixed(2),
+                TOTAL_PAID: '$' + (emailOrderData.totalPaid || 0).toFixed(2),
+                AMOUNT_DUE: '$' + (emailOrderData.amountDue || 0).toFixed(2),
+                PAYMENT_STATUS: emailOrderData.amountDue > 0 ? 'PARTIALLY PAID' : 'PAID IN FULL',
+                PAYMENT_HISTORY: formatPaymentHistory(emailOrderData.payments),
+                DAYS_OUTSTANDING: emailOrderData.daysOutstanding || '',
+                PAYMENT_LINK: emailOrderData.paymentLink || ''
+            };
+
+            // Replace variables in custom subject and body
+            const processedSubject = this.emailService.replaceTemplateVariables(subject, templateVars);
+            const processedBody = this.emailService.replaceTemplateVariables(body, templateVars);
+
+            console.log('🔍 Email Controller Debug - Template Variables Applied:');
+            console.log('  Original Subject:', subject);
+            console.log('  Processed Subject:', processedSubject);
+
             const emailResult = await this.emailService.sendEmail({
                 userId: userId,
                 orderId: orderId,
                 recipientEmail: to,
                 emailType: emailType,
-                customSubject: subject,
-                customBody: body,
+                customSubject: processedSubject,
+                customBody: processedBody,
                 attachments: attachments,
-                orderData: {
-                    ...pdfOrderData,
-                    paymentLink: paymentLink
-                },
+                orderData: emailOrderData,
                 senderName: userName
             });
 
@@ -259,6 +317,119 @@ class EmailController {
         } catch (error) {
             console.error('❌ Error getting recent email logs:', error);
             res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    /**
+     * Get email preview with processed template variables
+     * GET /api/email-preview/:orderId/:emailType
+     */
+    async getEmailPreview(req, res) {
+        try {
+            const { orderId, emailType = 'reminder' } = req.params;
+            const userId = req.user?.userId;
+            const userName = `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || 'Texon User';
+
+            if (!userId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            
+
+            // Get order data with payment information
+            const orderDetails = await this.brightpearlService.getOrderDetails(orderId);
+            if (!orderDetails.success) {
+                return res.status(404).json({ error: 'Order not found' });
+            }
+
+            const orderData = orderDetails.data;
+            const paymentData = await this.enhancedPdfService.getPaymentData(orderId);
+            
+            // Generate payment link
+            let paymentLink = null;
+            const paymentLinkResult = await this.paymentLinksService.generatePaymentLink(orderId);
+            if (paymentLinkResult.success) {
+                paymentLink = paymentLinkResult.data.paymentLink;
+            }
+
+            // Calculate payment totals
+            const totalAmount = parseFloat(orderData.totalAmount || orderData.total || 0);
+            const totalPaid = paymentData.totalPaid || 0;
+            const amountDue = Math.max(0, totalAmount - totalPaid);
+
+            const emailOrderData = {
+                ...orderData,
+                paymentLink: paymentLink,
+                customerName: orderData.billingContact?.name || orderData.customer?.name || orderData.customerName,
+                invoiceNumber: orderData.invoiceReference || `ORDER-${orderId}`,
+                totalAmount: totalAmount,
+                totalPaid: totalPaid,
+                amountDue: amountDue,
+                payments: paymentData.payments || [],
+                orderDate: orderData.orderDate,
+                orderRef: orderData.orderRef
+            };
+
+            // Get email template
+            const templateResult = await this.emailService.getEmailTemplate(emailType);
+            if (!templateResult.success) {
+                return res.status(500).json({ error: 'Failed to get email template' });
+            }
+
+            // Format payment history
+            const formatPaymentHistory = (payments) => {
+                if (!payments || payments.length === 0) {
+                    return 'No payments recorded.';
+                }
+                return payments.map(payment => {
+                    const date = new Date(payment.paymentdate).toLocaleDateString();
+                    const amount = parseFloat(payment.amountpaid || 0).toFixed(2);
+                    const method = payment.paymentmethodcode || 'Other';
+                    return `• ${date}: $${amount} (${method})`;
+                }).join('\n');
+            };
+
+            // Prepare template variables
+            const templateVars = {
+                ORDER_ID: orderId.toString(),
+                CUSTOMER_NAME: emailOrderData.customerName || 'Valued Customer',
+                COMPANY_NAME: 'Texon Towel',
+                SENDER_NAME: userName,
+                ORDER_REFERENCE: emailOrderData.reference || '',
+                INVOICE_NUMBER: emailOrderData.invoiceNumber || '',
+                TOTAL_AMOUNT: '$' + (emailOrderData.totalAmount || 0).toFixed(2),
+                TOTAL_PAID: '$' + (emailOrderData.totalPaid || 0).toFixed(2),
+                AMOUNT_DUE: '$' + (emailOrderData.amountDue || 0).toFixed(2),
+                PAYMENT_STATUS: emailOrderData.amountDue > 0 ? 'PARTIALLY PAID' : 'PAID IN FULL',
+                PAYMENT_HISTORY: formatPaymentHistory(emailOrderData.payments),
+                DAYS_OUTSTANDING: emailOrderData.daysOutstanding || '',
+                PAYMENT_LINK: emailOrderData.paymentLink || ''
+            };
+
+            // Process templates
+            const processedSubject = this.emailService.replaceTemplateVariables(
+                templateResult.template.subject_template, 
+                templateVars
+            );
+            const processedBody = this.emailService.replaceTemplateVariables(
+                templateResult.template.body_template, 
+                templateVars
+            );
+
+            res.json({
+                success: true,
+                subject: processedSubject,
+                body: processedBody,
+                recipientEmail: orderData.billingContact?.email || orderData.customer?.email || '',
+                orderData: emailOrderData
+            });
+
+        } catch (error) {
+            console.error('❌ Error getting email preview:', error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Failed to generate email preview',
+                details: error.message 
+            });
         }
     }
 

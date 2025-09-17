@@ -11,6 +11,7 @@ const SupabaseBrightpearlService = require('./supabase-brightpearl-service');
 const BrightpearlApiClient = require('./brightpearl-api-client');
 const CachedInvoiceService = require('./cached-invoice-service');
 const PaymentLinksService = require('./payment-links-service');
+const GitHubService = require('./github-service');
 require('dotenv').config();
 
 const app = express();
@@ -132,6 +133,7 @@ console.log('✅ Supabase clients initialized');
 const brightpearlService = new SupabaseBrightpearlService();
 const cachedInvoiceService = new CachedInvoiceService();
 const paymentLinksService = new PaymentLinksService();
+const gitHubService = new GitHubService();
 
 // Initialize Email Services
 const EmailController = require('./email-controller');
@@ -156,7 +158,7 @@ async function getUserByUsername(username) {
 }
 
 // Authentication middleware
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -164,12 +166,33 @@ const authenticateToken = (req, res, next) => {
         return res.status(401).json({ error: 'Access token required' });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, async (err, tokenPayload) => {
         if (err) {
             return res.status(403).json({ error: 'Invalid or expired token' });
         }
-        req.user = user;
-        next();
+
+        try {
+            // Fetch full user details from database
+            const { data: user, error } = await supabaseService
+                .from('app_users')
+                .select('id, username, email, first_name, last_name, role, is_active')
+                .eq('id', tokenPayload.userId)
+                .single();
+
+            if (error || !user || !user.is_active) {
+                return res.status(403).json({ error: 'User not found or inactive' });
+            }
+
+            // Add both token payload and full user details
+            req.user = {
+                ...tokenPayload,
+                ...user
+            };
+            next();
+        } catch (dbError) {
+            console.error('❌ Error fetching user details:', dbError);
+            return res.status(500).json({ error: 'Authentication error' });
+        }
     });
 };
 
@@ -308,6 +331,29 @@ app.post('/texon-invoicing-portal/api/payment-links/bulk-generate', authenticate
 // Basic API Routes
 app.get('/texon-invoicing-portal/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Version information endpoint
+app.get('/texon-invoicing-portal/api/version', async (req, res) => {
+    try {
+        console.log('📋 Fetching version information...');
+        const versionInfo = await gitHubService.getVersionInfo();
+        
+        res.json({
+            success: true,
+            ...versionInfo
+        });
+    } catch (error) {
+        console.error('❌ Error fetching version information:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch version information',
+            version: 'Unknown',
+            name: 'Texon Invoicing Portal',
+            url: 'https://github.com/rynoceris/texon-invoicing-portal',
+            fallback: true
+        });
+    }
 });
 
 // Authentication routes
@@ -2969,6 +3015,15 @@ app.get('/texon-invoicing-portal/api/email-template/:type', authenticateToken, a
         await emailController.getEmailTemplate(req, res);
     } catch (error) {
         console.error('❌ Error in get email template route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/texon-invoicing-portal/api/email-preview/:orderId/:emailType', authenticateToken, async (req, res) => {
+    try {
+        await emailController.getEmailPreview(req, res);
+    } catch (error) {
+        console.error('❌ Error in email preview route:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

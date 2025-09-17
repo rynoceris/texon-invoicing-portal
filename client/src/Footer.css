@@ -1,0 +1,264 @@
+/* Footer Component Styles */
+.app-footer {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-top: 1px solid #d1d5db;
+    padding: 16px 24px;
+    margin-top: auto;
+    font-size: 0.875rem;
+    color: #374151;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    gap: 16px;
+}
+
+/* Left section - Version info */
+.footer-left {
+    flex: 0 0 auto;
+}
+
+.version-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.version-info:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: #d1d5db;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-icon {
+    font-size: 1rem;
+    transition: color 0.2s ease;
+}
+
+.version-text {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.version-date {
+    font-weight: 400;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+/* Center section - App title */
+.footer-center {
+    flex: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.footer-title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1f2937;
+    letter-spacing: -0.025em;
+}
+
+.footer-subtitle {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* Right section - Meta info */
+.footer-right {
+    flex: 0 0 auto;
+}
+
+.footer-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.last-updated {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.refresh-version {
+    background: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.refresh-version:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+    transform: rotate(90deg);
+}
+
+.refresh-version:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Debug info section */
+.footer-debug {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.footer-debug details {
+    cursor: pointer;
+}
+
+.footer-debug summary {
+    color: #6b7280;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.footer-debug summary:hover {
+    background: rgba(107, 114, 128, 0.1);
+}
+
+.debug-content {
+    margin-top: 8px;
+    padding: 12px;
+    background: rgba(249, 250, 251, 0.8);
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.debug-content div {
+    margin-bottom: 4px;
+}
+
+.debug-content div:last-child {
+    margin-bottom: 0;
+}
+
+.debug-content strong {
+    color: #374151;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+    
+    .footer-left,
+    .footer-right {
+        flex: none;
+    }
+    
+    .footer-center {
+        order: -1;
+    }
+    
+    .version-date {
+        display: none; /* Hide date on mobile for cleaner look */
+    }
+    
+    .last-updated {
+        display: none; /* Hide last updated on mobile */
+    }
+}
+
+@media (max-width: 480px) {
+    .app-footer {
+        padding: 12px 16px;
+    }
+    
+    .footer-content {
+        gap: 8px;
+    }
+    
+    .version-info {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+    
+    .footer-title {
+        font-size: 0.9rem;
+    }
+    
+    .footer-subtitle {
+        font-size: 0.7rem;
+    }
+}
+
+/* Animation for loading state */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.version-info .status-icon {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.version-info:not(.loading) .status-icon {
+    animation: none;
+}
+
+/* Hover effects for better UX */
+.version-info:hover .version-text {
+    color: #059669;
+}
+
+.version-info:hover .status-icon {
+    transform: scale(1.1);
+}
+
+/* Focus states for accessibility */
+.version-info:focus,
+.refresh-version:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.version-info:focus {
+    border-radius: 20px;
+}
+
+.refresh-version:focus {
+    border-radius: 50%;
+}

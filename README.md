@@ -2,17 +2,23 @@
 
 A comprehensive financial operations platform built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, provide advanced analytics, automate contact enrichment, and streamline customer communications with intelligent automation.
 
-## 🎉 Latest Release - v1.1.1
+## 🎉 Latest Release - v1.1.2
 
 **🚀 New in September 2025:**
+- **🏷️ Dynamic Version Footer** with automatic GitHub release tracking
+- **🔄 Real-time Version Updates** fetched from GitHub API with intelligent caching
+- **🎯 Enhanced Email Template System** with proper variable replacement for payment information
+- **👤 Personalized Sender Names** using authenticated user's actual name from database
+- **💲 Currency Formatting** with proper dollar signs for all monetary amounts
+- **📧 Backend Email Preview API** for consistent template processing
+- **⚡ GitHub Integration Service** with fallback to package.json when API unavailable
+
+**Previous in v1.1.1:**
 - **📊 Enhanced PDF Invoice Generation** with improved Brightpearl formatting compatibility
 - **💰 Amount Due Calculations** for partially paid invoices with automatic balance calculation
 - **🎨 Logo Integration** with proper sizing and professional branding
-- **📋 SKU Display Fixes** eliminating incorrect placeholder values
-- **📅 Corrected Date Sources** using proper Brightpearl invoice date fields
-- **⚡ Performance Optimizations** with dual database integration
 
-[![Version](https://img.shields.io/badge/version-1.1.1-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
+[![Version](https://img.shields.io/badge/version-1.1.2-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
 [![Analytics](https://img.shields.io/badge/analytics-Chart.js-blue)](https://www.chartjs.org/)
 [![Performance](https://img.shields.io/badge/performance-+70%25-green)](https://github.com/rynoceris/texon-invoicing-portal)
 
@@ -148,6 +154,7 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **`payment-links-service.js`** - Payment link generation and management
 - **`pdf-service-pdfkit.js`** - PDF generation using PDFKit
 - **`enhanced-pdf-service.js`** - Enhanced PDF generation with Brightpearl formatting and Amount Due calculations
+- **`github-service.js`** - GitHub release tracking and version management with intelligent caching
 
 #### Frontend Components
 - **`App.js`** - Main application with analytics dashboard and routing
@@ -155,6 +162,7 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **`Analytics Component`** - Comprehensive financial analytics with Chart.js
 - **`EmailModal.js`** - Email composition with enriched contact data
 - **`EmailSettings.js`** - User email configuration management
+- **`Footer.js`** - Dynamic version footer with GitHub release tracking
 
 ## 📦 Installation
 

@@ -34,47 +34,33 @@ const EmailModal = ({ isOpen, invoice, emailType, onClose, onSend, token }) => {
     }, [isOpen, orderData, emailType]);
 
     const loadEmailTemplate = async () => {
-        // Get recipient email
-        const recipientEmail = orderData.billingContact?.email || orderData.customer?.email || orderData.deliveryContact?.email || '';
-        
         try {
-            // Get template from backend
-            const response = await fetch(`${API_BASE}/email-template/${emailType}`, {
+            // Get processed email preview from backend with all payment data
+            const response = await fetch(`${API_BASE}/email-preview/${orderData.id}/${emailType}`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
             });
             
             if (response.ok) {
-                const template = await response.json();
+                const preview = await response.json();
                 
-                // Replace template variables
-                const templateVars = {
-                    ORDER_ID: orderData.id,
-                    CUSTOMER_NAME: orderData.billingContact?.name || orderData.customer?.name || 'Valued Customer',
-                    COMPANY_NAME: 'Texon Towel',
-                    ORDER_REFERENCE: orderData.orderRef || orderData.reference || '',
-                    INVOICE_NUMBER: orderData.invoiceNumber || '',
-                    TOTAL_AMOUNT: orderData.totalAmount ? `$${orderData.totalAmount}` : '',
-                    DAYS_OUTSTANDING: orderData.days_outstanding || '',
-                    PAYMENT_LINK: orderData.paymentLink || ''
-                };
-
-                const subject = replaceTemplateVars(template.subject_template, templateVars);
-                const body = replaceTemplateVars(template.body_template, templateVars);
-
                 setEmailData({
-                    to: recipientEmail,
-                    subject: subject,
-                    body: body,
+                    to: preview.recipientEmail,
+                    subject: preview.subject,
+                    body: preview.body,
                     emailType: emailType
                 });
             } else {
-                // Fallback default template
+                console.error('Failed to load email preview:', response.status);
+                // Fallback to recipient email if preview fails
+                const recipientEmail = orderData.billingContact?.email || orderData.customer?.email || orderData.deliveryContact?.email || '';
                 setDefaultTemplate(recipientEmail);
             }
         } catch (error) {
-            console.error('Error loading email template:', error);
+            console.error('Error loading email preview:', error);
+            // Fallback to recipient email if preview fails
+            const recipientEmail = orderData.billingContact?.email || orderData.customer?.email || orderData.deliveryContact?.email || '';
             setDefaultTemplate(recipientEmail);
         }
     };

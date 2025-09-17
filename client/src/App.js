@@ -3,6 +3,7 @@ import './App.css';
 import InvoiceDashboard from './InvoiceDashboard';
 import './InvoiceDashboard.css';
 import EmailSettings from './EmailSettings';
+import Footer from './Footer';
 
 // Chart.js imports for analytics
 import {
@@ -1518,6 +1519,8 @@ function App() {
         {currentTab === 'analytics' && <Analytics token={token} user={user} />}
         {currentTab === 'users' && <Users token={token} user={user} />}
       </main>
+      
+      <Footer />
     </div>
   );
 }

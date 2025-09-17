@@ -203,13 +203,21 @@ class EmailService {
             }
 
             if (!data) {
-                // Return basic default template if none found
+                // Return enhanced default templates based on type
+                const templates = {
+                    invoice: {
+                        subject_template: 'Invoice for Order #{ORDER_ID} - {PAYMENT_STATUS}',
+                        body_template: 'Dear {CUSTOMER_NAME},\n\nPlease find attached your invoice for Order #{ORDER_ID}.\n\n=== INVOICE SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nAmount Due: ${AMOUNT_DUE}\nStatus: {PAYMENT_STATUS}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have any questions about this invoice or your payment, please don\'t hesitate to contact us.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}'
+                    },
+                    reminder: {
+                        subject_template: 'Payment Reminder: Order #{ORDER_ID} - ${AMOUNT_DUE} Outstanding',
+                        body_template: 'Dear {CUSTOMER_NAME},\n\nThis is a friendly reminder regarding your outstanding balance for Order #{ORDER_ID}.\n\n=== PAYMENT SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nOutstanding Balance: ${AMOUNT_DUE}\nDays Outstanding: {DAYS_OUTSTANDING}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nWe appreciate your previous payments and kindly ask that you remit the remaining balance of ${AMOUNT_DUE} to complete this order.\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have already sent payment, please disregard this message. If you have any questions or need to arrange alternative payment terms, please contact us immediately.\n\nThank you for your business.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}'
+                    }
+                };
+
                 return {
                     success: true,
-                    template: {
-                        subject_template: 'Invoice for Order #{ORDER_ID}',
-                        body_template: 'Dear {CUSTOMER_NAME},\\n\\nPlease find attached your invoice.\\n\\nPayment Link: {PAYMENT_LINK}\\n\\nBest regards,\\n{SENDER_NAME}'
-                    }
+                    template: templates[templateType] || templates.invoice
                 };
             }
 
@@ -261,6 +269,20 @@ class EmailService {
 
             const template = templateResult.template;
 
+            // Format payment history for email
+            const formatPaymentHistory = (payments) => {
+                if (!payments || payments.length === 0) {
+                    return 'No payments recorded.';
+                }
+                
+                return payments.map(payment => {
+                    const date = new Date(payment.paymentdate).toLocaleDateString();
+                    const amount = parseFloat(payment.amountpaid || 0).toFixed(2);
+                    const method = payment.paymentmethodcode || 'Other';
+                    return `• ${date}: $${amount} (${method})`;
+                }).join('\n');
+            };
+
             // Prepare template variables
             const templateVars = {
                 ORDER_ID: orderId,
@@ -269,7 +291,11 @@ class EmailService {
                 SENDER_NAME: senderName,
                 ORDER_REFERENCE: orderData.reference || '',
                 INVOICE_NUMBER: orderData.invoiceNumber || '',
-                TOTAL_AMOUNT: orderData.totalAmount || '',
+                TOTAL_AMOUNT: '$' + (orderData.totalAmount || 0).toFixed(2),
+                TOTAL_PAID: '$' + (orderData.totalPaid || 0).toFixed(2),
+                AMOUNT_DUE: '$' + (orderData.amountDue || 0).toFixed(2),
+                PAYMENT_STATUS: orderData.amountDue > 0 ? 'PARTIALLY PAID' : 'PAID IN FULL',
+                PAYMENT_HISTORY: formatPaymentHistory(orderData.payments),
                 DAYS_OUTSTANDING: orderData.daysOutstanding || '',
                 PAYMENT_LINK: orderData.paymentLink || ''
             };

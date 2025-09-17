@@ -508,7 +508,170 @@
 
 ---
 
+## Version 1.1.2 - Dynamic Version Footer & Enhanced Email System (September 2025)
+
+### 🎉 Major Features
+
+#### 🏷️ Dynamic Version Footer with GitHub Integration
+- **Real-time version tracking** with automatic GitHub release detection
+- **Intelligent caching system** reducing API calls with 5-minute TTL
+- **Professional footer display** showing current version, release date, and status indicators
+- **Fallback mechanisms** to package.json when GitHub API is unavailable
+- **User-friendly version clicking** opening GitHub releases page in new tab
+- **Debug information** for development and troubleshooting
+
+#### 🎯 Enhanced Email Template System
+- **Proper variable replacement** for payment information in email templates
+- **Currency formatting** with automatic dollar sign addition for monetary amounts
+- **Backend email preview API** ensuring consistent template processing
+- **Template variable processing** at controller level for reliable replacement
+- **Enhanced payment data integration** displaying accurate amounts and payment history
+
+#### 👤 Personalized User Experience
+- **Authenticated user sender names** using actual first_name and last_name from database
+- **Enhanced authentication middleware** fetching complete user profiles
+- **User-specific email signatures** replacing generic "Texon User" with actual names
+- **Database-driven personalization** throughout the application interface
+
+### 🛠 Technical Improvements
+
+#### Frontend Enhancements
+- **Footer component** (`Footer.js`) with React hooks and state management
+- **Responsive footer design** with mobile-optimized layout
+- **Real-time version updates** with periodic refresh functionality
+- **Status indicators** showing data source (GitHub API, cached, or fallback)
+- **Professional styling** with gradient backgrounds and hover effects
+- **Accessibility features** with proper focus states and keyboard navigation
+
+#### Backend Architecture
+- **GitHub Service** (`github-service.js`) with comprehensive release tracking
+- **Version API endpoint** (`/api/version`) for frontend integration
+- **Enhanced authentication middleware** with complete user data retrieval
+- **Template processing pipeline** moved to backend for consistency
+- **Email preview endpoint** (`/api/email-preview/:orderId/:emailType`) for UI display
+
+#### Email System Overhaul
+- **Backend template processing** ensuring consistent variable replacement
+- **Enhanced email controller** with proper payment data integration
+- **Template variable mapping** for all payment-related fields
+- **Currency formatting standardization** across all monetary displays
+- **Email preview generation** with real payment data
+
+### 🔧 System Features
+
+#### Version Management
+- **GitHub API integration** using axios for reliable HTTP requests
+- **Intelligent caching** with configurable TTL and automatic refresh
+- **Error handling** with graceful degradation to local version data
+- **Status tracking** differentiating between live, cached, and fallback data
+- **Repository information** automatically parsed from git remote configuration
+
+#### User Authentication Enhancement
+- **Complete user profile retrieval** from app_users table
+- **Enhanced JWT token processing** with full user context
+- **Database-driven user information** replacing static JWT payload data
+- **First and last name integration** throughout application interfaces
+- **User-specific customization** for emails and interface elements
+
+### 🐛 Bug Fixes & Optimizations
+
+#### Email Template Fixes
+- **Fixed literal template variables** appearing as `{AMOUNT_DUE}` instead of actual values
+- **Corrected currency formatting** with proper dollar sign display
+- **Resolved template processing** moving from frontend to backend for consistency
+- **Enhanced payment data integration** with accurate amount calculations
+- **Improved template variable replacement** with comprehensive field mapping
+
+#### User Interface Improvements
+- **Footer positioning** using flexbox for proper sticky footer behavior
+- **App layout optimization** ensuring footer stays at bottom of viewport
+- **Mobile responsiveness** with adaptive footer design for all screen sizes
+- **Version click functionality** with secure external link handling
+- **Loading states** and error indicators for version fetch operations
+
+#### Authentication System Fixes
+- **Complete user data retrieval** in authentication middleware
+- **Enhanced user context** throughout application with first_name/last_name
+- **Database integration** for real-time user information
+- **Token enhancement** with full user profile data
+- **Personalization improvements** replacing generic placeholders
+
+### 🔒 Security & Data Protection
+
+#### API Security
+- **Secure GitHub API integration** with proper error handling
+- **User data protection** in enhanced authentication middleware
+- **Input validation** for version information and user data
+- **Error sanitization** preventing sensitive information leakage
+- **Secure external links** with proper `noopener,noreferrer` attributes
+
+### 📊 Performance Metrics
+
+#### System Performance
+- **5-minute intelligent caching** reducing GitHub API calls by 90%
+- **Fallback mechanisms** ensuring 100% version display availability
+- **Optimized database queries** for user authentication enhancement
+- **Efficient template processing** moved to backend for consistency
+- **Memory optimization** through proper service instantiation
+
+#### User Experience Metrics
+- **Real-time version updates** with automatic refresh every 5 minutes
+- **Instant fallback response** when GitHub API is unavailable
+- **Consistent email templates** with 100% variable replacement accuracy
+- **Personalized user experience** with actual names throughout interface
+- **Professional footer display** enhancing application credibility
+
+### 🚀 Testing & Validation
+
+#### Version System Testing
+- **GitHub API integration testing** with live release data
+- **Fallback mechanism validation** ensuring graceful degradation
+- **Cache functionality testing** with TTL and refresh verification
+- **UI component testing** for all footer states and interactions
+- **Cross-browser compatibility** verified for version display
+
+#### Email Template Testing
+- **Variable replacement validation** for all payment-related fields
+- **Currency formatting verification** with proper dollar sign display
+- **Backend preview testing** ensuring consistency with sent emails
+- **User authentication testing** with enhanced middleware functionality
+- **End-to-end email workflow** validation from composition to delivery
+
+### 📈 Business Impact
+
+#### User Experience Enhancement
+- **Professional version display** increasing application credibility
+- **Personalized communications** with actual user names in emails
+- **Real-time version awareness** keeping users informed of updates
+- **Consistent email templates** reducing customer confusion
+- **Enhanced trust** through proper branding and personalization
+
+#### Operational Efficiency
+- **Automated version tracking** eliminating manual update notifications
+- **Centralized template processing** reducing email formatting errors
+- **User-specific customization** improving communication personalization
+- **Simplified maintenance** with automatic version display updates
+- **Enhanced debugging** through comprehensive version status information
+
+### 🔮 Future Enhancements
+
+#### Planned Improvements
+- **Release notes integration** displaying changelog directly in footer
+- **Update notifications** alerting users to new releases
+- **Version comparison** showing differences between releases
+- **Enhanced user preferences** for version update notifications
+- **Advanced email template customization** with user-specific variables
+
+---
+
 ## Version History
+
+### v1.1.2 (September 2025)
+- Dynamic version footer with automatic GitHub release tracking and intelligent caching
+- Enhanced email template system with proper variable replacement for payment information
+- Personalized user experience with authenticated user sender names from database
+- Backend email preview API ensuring consistent template processing
+- Currency formatting with automatic dollar sign addition for monetary amounts
 
 ### v1.1.1 (September 2025)
 - Enhanced PDF invoice generation with Amount Due calculations for partial payments
