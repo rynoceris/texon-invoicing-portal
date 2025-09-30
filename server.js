@@ -3298,6 +3298,133 @@ app.post('/texon-invoicing-portal/api/automated-emails/scheduler/stop', authenti
     }
 });
 
+// Update email template for a campaign
+app.put('/texon-invoicing-portal/api/automated-emails/campaigns/:id/template', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.updateTemplate(req, res);
+    } catch (error) {
+        console.error('❌ Error in update template route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Send test email using campaign template
+app.post('/texon-invoicing-portal/api/automated-emails/campaigns/:id/test', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.sendTestEmail(req, res);
+    } catch (error) {
+        console.error('❌ Error in send test email route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get automation system status
+app.get('/texon-invoicing-portal/api/automated-emails/system-status', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.getSystemStatus(req, res);
+    } catch (error) {
+        console.error('❌ Error in get system status route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Enable/disable all automated email campaigns
+app.post('/texon-invoicing-portal/api/automated-emails/system/toggle', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.toggleSystem(req, res);
+    } catch (error) {
+        console.error('❌ Error in toggle system route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get global automation test mode
+app.get('/texon-invoicing-portal/api/automated-emails/global-test-mode', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.getGlobalTestMode(req, res);
+    } catch (error) {
+        console.error('❌ Error in get global test mode route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Set global automation test mode
+app.post('/texon-invoicing-portal/api/automated-emails/global-test-mode', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.setGlobalTestMode(req, res);
+    } catch (error) {
+        console.error('❌ Error in set global test mode route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Global test email routes
+app.get('/texon-invoicing-portal/api/automated-emails/global-test-email', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.getGlobalTestEmail(req, res);
+    } catch (error) {
+        console.error('❌ Error in get global test email route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/texon-invoicing-portal/api/automated-emails/global-test-email', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.setGlobalTestEmail(req, res);
+    } catch (error) {
+        console.error('❌ Error in set global test email route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ===== ANALYTICS & FINANCIAL REPORTS API =====
 // (Based on ROADMAP.md requirements for Advanced Dashboard & Analytics)
 

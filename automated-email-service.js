@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const EmailService = require('./email-service');
 const SafetyMechanisms = require('./safety-mechanisms');
+const EnhancedPDFService = require('./enhanced-pdf-service');
 
 /**
  * Automated Email Service for overdue invoice notifications
@@ -34,6 +35,7 @@ class AutomatedEmailService {
 
         this.emailService = new EmailService();
         this.safetyMechanisms = new SafetyMechanisms();
+        this.enhancedPdfService = new EnhancedPDFService();
         console.log('✅ Automated Email Service initialized');
     }
 
@@ -44,6 +46,15 @@ class AutomatedEmailService {
         let logId;
 
         try {
+            // Check for global test mode override for automated runs
+            if (triggeredBy === 'scheduler' || triggeredBy === 'automatic') {
+                const globalTestMode = await this.getGlobalTestMode();
+                if (globalTestMode) {
+                    testMode = true;
+                    console.log('🧪 Global test mode enabled - forcing test mode for automated run');
+                }
+            }
+
             console.log(`🚀 Starting automated email run (${triggeredBy})${testMode ? ' [TEST MODE]' : ''}`);
 
             // Validate automation run with safety checks
@@ -153,14 +164,10 @@ class AutomatedEmailService {
      */
     async processCampaign(campaign, testMode = false) {
         try {
-            // Calculate cutoff date for this campaign
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - campaign.trigger_days);
+            console.log(`   📅 Looking for invoices eligible for ${campaign.campaign_name}`);
 
-            console.log(`   📅 Looking for invoices with tax_date <= ${cutoffDate.toISOString().split('T')[0]}`);
-
-            // Find eligible overdue invoices
-            const { data: overdueInvoices, error } = await this.supabaseBrightpearl
+            // Find eligible overdue invoices using days_outstanding filter
+            const { data: overdueInvoices, error } = await this.supabase
                 .from('cached_invoices')
                 .select(`
                     id,
@@ -175,10 +182,10 @@ class AutomatedEmailService {
                     billing_company_name,
                     days_outstanding
                 `)
-                .lte('tax_date', cutoffDate.toISOString())
+                .gte('days_outstanding', 30) // Only overdue invoices (30+ days)
                 .gt('outstanding_amount', 0) // Only invoices with outstanding balance
                 .not('billing_contact_email', 'is', null) // Must have email
-                .order('tax_date', { ascending: true });
+                .order('days_outstanding', { ascending: true });
 
             if (error) throw error;
 
@@ -195,10 +202,8 @@ class AutomatedEmailService {
             for (const invoice of overdueInvoices) {
                 processed++;
 
-                // Calculate actual days outstanding
-                const taxDate = new Date(invoice.tax_date);
-                const today = new Date();
-                const daysOutstanding = Math.floor((today - taxDate) / (1000 * 60 * 60 * 24));
+                // Use the pre-calculated days_outstanding field instead of recalculating
+                const daysOutstanding = invoice.days_outstanding;
 
                 // Check if this invoice is in the right range for this campaign
                 const isEligible = this.isInvoiceEligibleForCampaign(daysOutstanding, campaign);
@@ -270,13 +275,13 @@ class AutomatedEmailService {
     isInvoiceEligibleForCampaign(daysOutstanding, campaign) {
         switch (campaign.campaign_type) {
             case 'overdue_31_60':
-                return daysOutstanding >= 31 && daysOutstanding <= 60;
+                return daysOutstanding >= 30 && daysOutstanding <= 60;
 
             case 'overdue_61_90':
-                return daysOutstanding >= 61 && daysOutstanding <= 90;
+                return daysOutstanding >= 60 && daysOutstanding <= 90;
 
             case 'overdue_91_plus':
-                return daysOutstanding >= 91 && campaign.send_frequency === 'once';
+                return daysOutstanding >= 90 && campaign.send_frequency === 'once';
 
             case 'overdue_91_plus_recurring':
                 // For recurring 91+ day emails, send every 10 days starting at day 101
@@ -352,23 +357,60 @@ class AutomatedEmailService {
                         continue;
                     }
 
+                    // Check if global test mode is enabled and get global test email
+                    const globalTestMode = await this.getGlobalTestMode();
+                    const globalTestEmail = globalTestMode ? await this.getGlobalTestEmail() : null;
+
+                    // Determine recipient email (use global test email if global test mode is enabled)
+                    const recipientEmail = globalTestMode && globalTestEmail ?
+                        globalTestEmail :
+                        scheduledEmail.recipient_email;
+
+                    // Log if global test mode is redirecting emails
+                    if (globalTestMode && globalTestEmail && recipientEmail !== scheduledEmail.recipient_email) {
+                        console.log(`🧪 Global test mode: redirecting email from ${scheduledEmail.recipient_email} to ${recipientEmail}`);
+                    }
+
+                    // Generate PDF attachment for the invoice
+                    console.log(`📄 Generating PDF invoice for automated email...`);
+                    const pdfOrderData = {
+                        customerName: invoiceData.billing_contact_name,
+                        reference: invoiceData.order_reference,
+                        invoiceNumber: invoiceData.invoice_number,
+                        totalAmount: invoiceData.total_amount,
+                        totalPaid: invoiceData.paid_amount,
+                        amountDue: invoiceData.outstanding_amount,
+                        daysOutstanding: invoiceData.days_outstanding,
+                        taxDate: new Date(invoiceData.tax_date).toLocaleDateString(),
+                        payments: [], // You may want to fetch payment history
+                        paymentLink: invoiceData.payment_link_url || ''
+                    };
+
+                    let attachments = [];
+                    try {
+                        const pdfResult = await this.enhancedPdfService.generateInvoicePDF(pdfOrderData);
+                        if (pdfResult.success) {
+                            attachments = [
+                                this.enhancedPdfService.createEmailAttachment(pdfResult.buffer, pdfResult.filename)
+                            ];
+                            console.log(`✅ PDF generated successfully: ${pdfResult.filename}`);
+                        } else {
+                            console.log(`⚠️ PDF generation failed: ${pdfResult.error}`);
+                            // Continue without attachment if PDF generation fails
+                        }
+                    } catch (pdfError) {
+                        console.log(`❌ PDF generation error:`, pdfError);
+                        // Continue without attachment if PDF generation fails
+                    }
+
                     // Send the email
                     const emailResult = await this.emailService.sendEmail({
                         userId: defaultUser.id,
                         orderId: scheduledEmail.order_id,
-                        recipientEmail: scheduledEmail.recipient_email,
+                        recipientEmail: recipientEmail,
                         emailType: scheduledEmail.automated_email_campaigns.template_type,
-                        orderData: {
-                            customerName: invoiceData.billing_contact_name,
-                            reference: invoiceData.order_reference,
-                            invoiceNumber: invoiceData.invoice_number,
-                            totalAmount: invoiceData.total_amount,
-                            totalPaid: invoiceData.paid_amount,
-                            amountDue: invoiceData.outstanding_amount,
-                            daysOutstanding: invoiceData.days_outstanding,
-                            taxDate: new Date(invoiceData.tax_date).toLocaleDateString(),
-                            payments: [] // You may want to fetch payment history
-                        },
+                        orderData: pdfOrderData,
+                        attachments: attachments,
                         senderName: defaultUser.first_name ? `${defaultUser.first_name} ${defaultUser.last_name}` : 'Texon Towel'
                     });
 
@@ -568,7 +610,7 @@ class AutomatedEmailService {
      * Get invoice data for email variables
      */
     async getInvoiceData(orderId) {
-        const { data, error } = await this.supabaseBrightpearl
+        const { data, error } = await this.supabase
             .from('cached_invoices')
             .select('*')
             .eq('id', orderId)
@@ -592,6 +634,78 @@ class AutomatedEmailService {
 
         if (error) return null;
         return data;
+    }
+
+    /**
+     * Get global automation test mode setting
+     */
+    async getGlobalTestMode() {
+        try {
+            const { data, error } = await this.supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'automation_global_test_mode')
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data?.value === 'true';
+        } catch (error) {
+            console.error('❌ Error getting global test mode:', error);
+            return false; // Default to false if can't determine
+        }
+    }
+
+    /**
+     * Set global automation test mode setting
+     */
+    async setGlobalTestMode(enabled) {
+        try {
+            const { error } = await this.supabase
+                .from('app_settings')
+                .upsert({
+                    key: 'automation_global_test_mode',
+                    value: String(enabled)
+                });
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('❌ Error setting global test mode:', error);
+            return false;
+        }
+    }
+
+    async getGlobalTestEmail() {
+        try {
+            const { data, error } = await this.supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'automation_global_test_email')
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data?.value || '';
+        } catch (error) {
+            console.error('❌ Error getting global test email:', error);
+            return '';
+        }
+    }
+
+    async setGlobalTestEmail(email) {
+        try {
+            const { error } = await this.supabase
+                .from('app_settings')
+                .upsert({
+                    key: 'automation_global_test_email',
+                    value: email
+                });
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('❌ Error setting global test email:', error);
+            return false;
+        }
     }
 
     /**
@@ -620,6 +734,50 @@ class AutomatedEmailService {
         };
 
         return stats;
+    }
+
+    /**
+     * Replace template variables with actual values
+     */
+    replaceTemplateVariables(template, variables) {
+        if (!template) return '';
+
+        let result = template;
+        Object.keys(variables).forEach(key => {
+            // Handle both {KEY} and {{KEY}} formats
+            const singleBracePlaceholder = `{${key}}`;
+            const doubleBracePlaceholder = `{{${key}}}`;
+            const value = variables[key] || '';
+
+            result = result.replace(new RegExp(singleBracePlaceholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+            result = result.replace(new RegExp(doubleBracePlaceholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+        });
+
+        return result;
+    }
+
+
+
+    /**
+     * Check if customer is opted out
+     */
+    async isCustomerOptedOut(emailAddress) {
+        if (!emailAddress) return true;
+
+        const { data, error } = await this.supabase
+            .from('customer_email_preferences')
+            .select('*')
+            .eq('email_address', emailAddress.toLowerCase())
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // Not found is ok
+            throw error;
+        }
+
+        if (!data) return false; // No record means not opted out
+
+        // Check if opted out of all emails or relevant type
+        return data.opted_out_all || data.opted_out_reminders || data.opted_out_collections;
     }
 }
 

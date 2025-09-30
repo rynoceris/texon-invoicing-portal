@@ -3,6 +3,8 @@ import './App.css';
 import InvoiceDashboard from './InvoiceDashboard';
 import './InvoiceDashboard.css';
 import EmailSettings from './EmailSettings';
+import AutomatedEmailSettings from './AutomatedEmailSettings';
+import AutomatedEmailReports from './AutomatedEmailReports';
 import Footer from './Footer';
 
 // Chart.js imports for analytics
@@ -1489,17 +1491,33 @@ function App() {
           >
             Settings
           </button>
-          <button 
-            className={currentTab === 'email-settings' ? 'active' : ''} 
+          <button
+            className={currentTab === 'email-settings' ? 'active' : ''}
             onClick={() => setCurrentTab('email-settings')}
           >
             📧 Email Settings
           </button>
-          <button 
-            className={currentTab === 'analytics' ? 'active' : ''} 
+          {user.role === 'admin' && (
+            <button
+              className={currentTab === 'automated-emails' ? 'active' : ''}
+              onClick={() => setCurrentTab('automated-emails')}
+            >
+              🤖 Automated Emails
+            </button>
+          )}
+          {user.role === 'admin' && (
+            <button
+              className={currentTab === 'email-reports' ? 'active' : ''}
+              onClick={() => setCurrentTab('email-reports')}
+            >
+              📊 Email Reports
+            </button>
+          )}
+          <button
+            className={currentTab === 'analytics' ? 'active' : ''}
             onClick={() => setCurrentTab('analytics')}
           >
-            📊 Analytics
+            📈 Analytics
           </button>
           {user.role === 'admin' && (
             <button 
@@ -1516,6 +1534,8 @@ function App() {
         {currentTab === 'dashboard' && <Dashboard token={token} />}
         {currentTab === 'settings' && <Settings token={token} user={user} />}
         {currentTab === 'email-settings' && <EmailSettings token={token} user={user} />}
+        {currentTab === 'automated-emails' && <AutomatedEmailSettings token={token} user={user} setCurrentTab={setCurrentTab} />}
+        {currentTab === 'email-reports' && <AutomatedEmailReports token={token} user={user} />}
         {currentTab === 'analytics' && <Analytics token={token} user={user} />}
         {currentTab === 'users' && <Users token={token} user={user} />}
       </main>

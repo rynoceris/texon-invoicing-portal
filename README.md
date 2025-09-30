@@ -2,23 +2,56 @@
 
 A comprehensive financial operations platform built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, provide advanced analytics, automate contact enrichment, and streamline customer communications with intelligent automation.
 
-## 🎉 Latest Release - v1.1.2
+## 🎉 Latest Release - v2.0.0
 
-**🚀 New in September 2025:**
-- **🏷️ Dynamic Version Footer** with automatic GitHub release tracking
-- **🔄 Real-time Version Updates** fetched from GitHub API with intelligent caching
-- **🎯 Enhanced Email Template System** with proper variable replacement for payment information
-- **👤 Personalized Sender Names** using authenticated user's actual name from database
-- **💲 Currency Formatting** with proper dollar signs for all monetary amounts
-- **📧 Backend Email Preview API** for consistent template processing
-- **⚡ GitHub Integration Service** with fallback to package.json when API unavailable
+**🚀 Major Release - September 2025:**
 
-**Previous in v1.1.1:**
-- **📊 Enhanced PDF Invoice Generation** with improved Brightpearl formatting compatibility
-- **💰 Amount Due Calculations** for partially paid invoices with automatic balance calculation
-- **🎨 Logo Integration** with proper sizing and professional branding
+We've completed a **MAJOR** release implementing a comprehensive **automated email campaign system** that transforms the portal into a fully automated collections platform!
 
-[![Version](https://img.shields.io/badge/version-1.1.2-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
+### 📧 Automated Email Campaigns
+- **Four-tier campaign system** (Reminder 1, 2, 3, and Final Notice)
+- **Intelligent scheduling** with configurable day intervals
+- **Smart targeting** based on invoice age and previous emails sent
+- **Duplicate prevention** to avoid sending multiple emails for the same invoice
+- **Campaign enable/disable** with real-time toggle controls
+
+### 🎨 Advanced Template Editor
+- **Rich text customization** for subject lines and body content
+- **11 dynamic variables** for personalized emails:
+  - `{CUSTOMER_NAME}`, `{COMPANY_NAME}`, `{INVOICE_NUMBER}`
+  - `{INVOICE_DATE}`, `{DUE_DATE}`, `{DAYS_OVERDUE}`
+  - `{TOTAL_AMOUNT}`, `{AMOUNT_DUE}`, `{ORDER_REFERENCE}`
+  - `{PAYMENT_LINK}`, `{SENDER_NAME}`
+- **Template preview** with live variable substitution
+- **Campaign-specific templates** for each reminder tier
+- **Default template library** with professional messaging
+
+### 📊 Campaign Management Dashboard
+- **Real-time statistics** showing emails sent per campaign
+- **Campaign configuration** interface with day settings
+- **Template editing** directly from campaign view
+- **Status monitoring** for active/inactive campaigns
+- **Comprehensive campaign overview** with action buttons
+
+### ✉️ PDF Invoice Attachments
+- **Automatic PDF generation** for all automated emails
+- **Professional branded invoices** matching manual email format
+- **Puppeteer-based rendering** for consistent PDF output
+- **Invoice details** including line items and amounts
+
+### 🎯 UI/UX Improvements
+- **Fixed Email Settings layout** with proper toggle switch styling
+- **Enhanced Templates tab** with readable campaign selection buttons
+- **Edit Template navigation** from Email Campaigns to Templates tab
+- **Scoped CSS** to prevent style conflicts across components
+
+**Previous releases:**
+- **v1.1.2**: Dynamic version footer, enhanced email templates, GitHub integration
+- **v1.1.1**: Enhanced PDF generation, amount due calculations, logo integration
+- **v1.1.0**: Analytics dashboard, contact enrichment, cash flow visualization
+
+[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
+[![Email Automation](https://img.shields.io/badge/email-automated-blue)](https://github.com/rynoceris/texon-invoicing-portal)
 [![Analytics](https://img.shields.io/badge/analytics-Chart.js-blue)](https://www.chartjs.org/)
 [![Performance](https://img.shields.io/badge/performance-+70%25-green)](https://github.com/rynoceris/texon-invoicing-portal)
 
@@ -50,13 +83,18 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **Payment status tracking** with visual status indicators
 - **Outstanding days calculation** for comprehensive aging reports
 
-### 📧 Enhanced Email & Communication System
-- **Automated invoice and reminder emails** with customizable templates
+### 📧 Automated Email Campaign System
+- **Four-tier automated campaigns** (Reminder 1, 2, 3, Final Notice)
+- **Intelligent scheduling** with configurable day intervals per campaign
+- **Smart targeting logic** based on invoice age and previous email history
+- **Advanced template editor** with 11 dynamic variables for personalization
+- **Campaign management dashboard** with real-time statistics and controls
+- **Duplicate prevention** to avoid sending multiple emails for same invoice
+- **PDF invoice attachments** automatically generated for all automated emails
 - **Gmail SMTP integration** with App Password authentication
 - **Test mode** for safe email testing before going live
 - **Comprehensive email history tracking** with enriched contact information
 - **Template variable substitution** with auto-resolved customer names
-- **PDF invoice attachments** automatically generated and attached
 - **Contact enrichment** with automatic name and company resolution
 
 ### 👥 Contact & Staff Enrichment
@@ -94,10 +132,11 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **Supabase** for PostgreSQL database and authentication
 - **Brightpearl API** integration for ERP data and contact enrichment
 - **Nodemailer** for email sending via Gmail SMTP
-- **PDFKit** for PDF generation (no browser dependencies)
+- **Puppeteer** for PDF generation with professional invoice rendering
+- **PDFKit** for fallback PDF generation (no browser dependencies)
 - **JWT** for authentication and authorization
 - **Crypto** module for password encryption
-- **Node-Cron** for automated background processing
+- **Node-Cron** for automated email campaign scheduling and background processing
 - **Intelligent caching system** for performance optimization
 
 ### Frontend
@@ -155,6 +194,8 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **`pdf-service-pdfkit.js`** - PDF generation using PDFKit
 - **`enhanced-pdf-service.js`** - Enhanced PDF generation with Brightpearl formatting and Amount Due calculations
 - **`github-service.js`** - GitHub release tracking and version management with intelligent caching
+- **`automated-email-service.js`** - Automated email campaign processing and scheduling
+- **`automated-email-controller.js`** - API endpoints for campaign management
 
 #### Frontend Components
 - **`App.js`** - Main application with analytics dashboard and routing
@@ -162,6 +203,10 @@ A comprehensive financial operations platform built for Texon Towel. This portal
 - **`Analytics Component`** - Comprehensive financial analytics with Chart.js
 - **`EmailModal.js`** - Email composition with enriched contact data
 - **`EmailSettings.js`** - User email configuration management
+- **`AutomatedEmailSettings.js`** - Campaign management interface with three tabs:
+  - Email Campaigns tab - Campaign overview and statistics
+  - Templates tab - Advanced template editor with variable substitution
+  - Reports tab - Email history and campaign performance
 - **`Footer.js`** - Dynamic version footer with GitHub release tracking
 
 ## 📦 Installation
@@ -407,6 +452,15 @@ Authorization: Bearer <your-jwt-token>
 - `POST /api/test-email` - Send test email
 - `GET /api/email-logs/order/:orderId` - Get email history for order
 - `GET /api/email-logs/recent` - Get recent email logs
+
+#### Automated Email Campaigns
+- `GET /api/automated-emails/campaigns` - Get all email campaigns
+- `POST /api/automated-emails/campaigns/:id/toggle` - Toggle campaign enabled/disabled
+- `GET /api/automated-emails/templates/:campaignType` - Get template for campaign
+- `POST /api/automated-emails/templates/:campaignType` - Save template for campaign
+- `POST /api/automated-emails/preview` - Preview email with variable substitution
+- `POST /api/automated-emails/process` - Process and send automated campaign emails
+- `GET /api/automated-emails/reports` - Get email campaign reports and statistics
 
 #### Payment Links
 - `POST /api/payment-links` - Generate payment link
