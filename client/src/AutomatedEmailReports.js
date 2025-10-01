@@ -419,11 +419,67 @@ const ActivityReport = ({ logs, onReload }) => {
 // Email Schedule Report Component
 const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
     const [filter, setFilter] = useState('all');
+    const [sortConfig, setSortConfig] = useState({ key: 'sent_at', direction: 'desc' });
 
-    const filteredEmails = scheduled.filter(email => {
-        if (filter === 'all') return true;
-        return email.status === filter;
-    });
+    const handleSort = (key) => {
+        setSortConfig(prevConfig => ({
+            key,
+            direction: prevConfig.key === key && prevConfig.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    const getSortedAndFilteredEmails = () => {
+        // First filter
+        let filtered = scheduled.filter(email => {
+            if (filter === 'all') return true;
+            return email.status === filter;
+        });
+
+        // Then sort
+        return filtered.sort((a, b) => {
+            let aValue, bValue;
+
+            switch (sortConfig.key) {
+                case 'status':
+                    aValue = a.status || '';
+                    bValue = b.status || '';
+                    break;
+                case 'customer':
+                    aValue = a.cached_invoices?.billing_contact_name || '';
+                    bValue = b.cached_invoices?.billing_contact_name || '';
+                    break;
+                case 'campaign':
+                    aValue = a.automated_email_campaigns?.campaign_name || '';
+                    bValue = b.automated_email_campaigns?.campaign_name || '';
+                    break;
+                case 'invoice':
+                    aValue = a.cached_invoices?.invoice_number || '';
+                    bValue = b.cached_invoices?.invoice_number || '';
+                    break;
+                case 'scheduled_for':
+                    aValue = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
+                    bValue = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
+                    break;
+                case 'sent_at':
+                    // Default: sort by sent_at, with most recent first, nulls last
+                    aValue = a.sent_at ? new Date(a.sent_at).getTime() : 0;
+                    bValue = b.sent_at ? new Date(b.sent_at).getTime() : 0;
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (aValue < bValue) {
+                return sortConfig.direction === 'asc' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return sortConfig.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+    };
+
+    const sortedEmails = getSortedAndFilteredEmails();
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -431,6 +487,7 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
             case 'sent': return '✅';
             case 'failed': return '❌';
             case 'cancelled': return '🚫';
+            case 'pending': return '⏳';
             default: return '❓';
         }
     };
@@ -441,8 +498,14 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
             case 'sent': return 'success';
             case 'failed': return 'error';
             case 'cancelled': return 'neutral';
+            case 'pending': return 'warning';
             default: return 'neutral';
         }
+    };
+
+    const getSortIcon = (columnKey) => {
+        if (sortConfig.key !== columnKey) return '⇅';
+        return sortConfig.direction === 'asc' ? '↑' : '↓';
     };
 
     return (
@@ -467,18 +530,31 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
                 </div>
             </div>
 
-            {filteredEmails.length > 0 ? (
+            {sortedEmails.length > 0 ? (
                 <div className="emails-table">
                     <div className="table-header">
-                        <div className="col-status">Status</div>
-                        <div className="col-customer">Customer</div>
-                        <div className="col-campaign">Campaign</div>
-                        <div className="col-invoice">Invoice</div>
-                        <div className="col-scheduled">Scheduled For</div>
-                        <div className="col-sent">Sent At</div>
+                        <div className="col-status sortable" onClick={() => handleSort('status')}>
+                            Status {getSortIcon('status')}
+                        </div>
+                        <div className="col-customer sortable" onClick={() => handleSort('customer')}>
+                            Customer {getSortIcon('customer')}
+                        </div>
+                        <div className="col-campaign sortable" onClick={() => handleSort('campaign')}>
+                            Campaign {getSortIcon('campaign')}
+                        </div>
+                        <div className="col-invoice sortable" onClick={() => handleSort('invoice')}>
+                            Invoice {getSortIcon('invoice')}
+                        </div>
+                        <div className="col-scheduled sortable" onClick={() => handleSort('scheduled_for')}>
+                            Scheduled For {getSortIcon('scheduled_for')}
+                        </div>
+                        <div className="col-sent sortable" onClick={() => handleSort('sent_at')}>
+                            Sent At {getSortIcon('sent_at')}
+                        </div>
+                        <div className="col-error">Error</div>
                     </div>
                     <div className="table-body">
-                        {filteredEmails.map((email, index) => (
+                        {sortedEmails.map((email, index) => (
                             <div key={index} className={`table-row ${getStatusClass(email.status)}`}>
                                 <div className="col-status">
                                     <span className="status-badge">
@@ -487,8 +563,8 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
                                 </div>
                                 <div className="col-customer">
                                     <div className="customer-info">
-                                        <div className="customer-name">{email.customer_name || 'Unknown'}</div>
-                                        <div className="customer-email">{email.customer_email}</div>
+                                        <div className="customer-name">{email.cached_invoices?.billing_contact_name || 'Unknown'}</div>
+                                        <div className="customer-email">{email.recipient_email || email.cached_invoices?.billing_contact_email || 'N/A'}</div>
                                     </div>
                                 </div>
                                 <div className="col-campaign">
@@ -496,8 +572,8 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
                                 </div>
                                 <div className="col-invoice">
                                     <div className="invoice-info">
-                                        <div className="invoice-number">{email.invoice_number || 'N/A'}</div>
-                                        <div className="order-reference">{email.order_reference || 'N/A'}</div>
+                                        <div className="invoice-number">{email.cached_invoices?.invoice_number || 'N/A'}</div>
+                                        <div className="order-reference">Order #{email.order_id || 'N/A'}</div>
                                     </div>
                                 </div>
                                 <div className="col-scheduled">
@@ -505,6 +581,17 @@ const EmailScheduleReport = ({ scheduled, dateRange, onReload }) => {
                                 </div>
                                 <div className="col-sent">
                                     {email.sent_at ? new Date(email.sent_at).toLocaleString() : 'Not sent'}
+                                </div>
+                                <div className="col-error">
+                                    {email.status === 'failed' && email.error_message ? (
+                                        <span className="error-text" title={email.error_message}>
+                                            {email.error_message.length > 50
+                                                ? email.error_message.substring(0, 50) + '...'
+                                                : email.error_message}
+                                        </span>
+                                    ) : (
+                                        '-'
+                                    )}
                                 </div>
                             </div>
                         ))}

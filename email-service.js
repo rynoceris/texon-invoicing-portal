@@ -207,11 +207,11 @@ class EmailService {
                 const templates = {
                     invoice: {
                         subject_template: 'Invoice for Order #{ORDER_ID} - {PAYMENT_STATUS}',
-                        body_template: 'Dear {CUSTOMER_NAME},\n\nPlease find attached your invoice for Order #{ORDER_ID}.\n\n=== INVOICE SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nAmount Due: ${AMOUNT_DUE}\nStatus: {PAYMENT_STATUS}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have any questions about this invoice or your payment, please don\'t hesitate to contact us.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}'
+                        body_template: 'Dear {CUSTOMER_NAME},\n\nPlease find attached your invoice for Order #{ORDER_ID}.\n\n=== INVOICE SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nAmount Due: ${AMOUNT_DUE}\nStatus: {PAYMENT_STATUS}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have any questions about this invoice or your payment, please don\'t hesitate to contact us.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}\n\n---\nTo stop receiving automated payment reminders, click here: {OPT_OUT_LINK}'
                     },
                     reminder: {
                         subject_template: 'Payment Reminder: Order #{ORDER_ID} - ${AMOUNT_DUE} Outstanding',
-                        body_template: 'Dear {CUSTOMER_NAME},\n\nThis is a friendly reminder regarding your outstanding balance for Order #{ORDER_ID}.\n\n=== PAYMENT SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nOutstanding Balance: ${AMOUNT_DUE}\nDays Outstanding: {DAYS_OUTSTANDING}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nWe appreciate your previous payments and kindly ask that you remit the remaining balance of ${AMOUNT_DUE} to complete this order.\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have already sent payment, please disregard this message. If you have any questions or need to arrange alternative payment terms, please contact us immediately.\n\nThank you for your business.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}'
+                        body_template: 'Dear {CUSTOMER_NAME},\n\nThis is a friendly reminder regarding your outstanding balance for Order #{ORDER_ID}.\n\n=== PAYMENT SUMMARY ===\nInvoice Number: {INVOICE_NUMBER}\nOrder Reference: {ORDER_REFERENCE}\nTotal Amount: ${TOTAL_AMOUNT}\nAmount Paid: ${TOTAL_PAID}\nOutstanding Balance: ${AMOUNT_DUE}\nDays Outstanding: {DAYS_OUTSTANDING}\n\n=== PAYMENT HISTORY ===\n{PAYMENT_HISTORY}\n\nWe appreciate your previous payments and kindly ask that you remit the remaining balance of ${AMOUNT_DUE} to complete this order.\n\nPayment Link: {PAYMENT_LINK}\n\nIf you have already sent payment, please disregard this message. If you have any questions or need to arrange alternative payment terms, please contact us immediately.\n\nThank you for your business.\n\nBest regards,\n{SENDER_NAME}\n{COMPANY_NAME}\n\n---\nTo stop receiving automated payment reminders, click here: {OPT_OUT_LINK}'
                     }
                 };
 
@@ -254,7 +254,8 @@ class EmailService {
         customBody = null,
         attachments = [],
         orderData = {},
-        senderName = 'Texon Towel'
+        senderName = 'Texon Towel',
+        bypassPersonalTestMode = false
     }) {
         let logId;
         
@@ -283,6 +284,15 @@ class EmailService {
                 }).join('\n');
             };
 
+            // Generate opt-out token
+            const optOutToken = Buffer.from(`${recipientEmail}:${Date.now()}`).toString('base64');
+            // Use BASE_URL from env, or default based on NODE_ENV
+            const baseUrl = process.env.BASE_URL ||
+                (process.env.NODE_ENV === 'production'
+                    ? 'https://collegesportsdirectory.com'
+                    : 'http://localhost:3002');
+            const optOutLink = `${baseUrl}/texon-invoicing-portal/api/public/opt-out?token=${optOutToken}`;
+
             // Prepare template variables
             const templateVars = {
                 ORDER_ID: orderId,
@@ -291,13 +301,15 @@ class EmailService {
                 SENDER_NAME: senderName,
                 ORDER_REFERENCE: orderData.reference || '',
                 INVOICE_NUMBER: orderData.invoiceNumber || '',
-                TOTAL_AMOUNT: '$' + (orderData.totalAmount || 0).toFixed(2),
-                TOTAL_PAID: '$' + (orderData.totalPaid || 0).toFixed(2),
-                AMOUNT_DUE: '$' + (orderData.amountDue || 0).toFixed(2),
+                TOTAL_AMOUNT: (orderData.totalAmount || 0).toFixed(2),
+                TOTAL_PAID: (orderData.totalPaid || 0).toFixed(2),
+                AMOUNT_DUE: (orderData.amountDue || 0).toFixed(2),
                 PAYMENT_STATUS: orderData.amountDue > 0 ? 'PARTIALLY PAID' : 'PAID IN FULL',
                 PAYMENT_HISTORY: formatPaymentHistory(orderData.payments),
                 DAYS_OUTSTANDING: orderData.daysOutstanding || '',
-                PAYMENT_LINK: orderData.paymentLink || ''
+                TAX_DATE: orderData.taxDate || '',
+                PAYMENT_LINK: orderData.paymentLink || '',
+                OPT_OUT_LINK: optOutLink
             };
 
             // Replace template variables
@@ -309,14 +321,16 @@ class EmailService {
             const userSettings = await this.getUserEmailSettings(userId);
             const senderEmail = userSettings.settings.email_address;
             
-            // Handle test mode - redirect emails if enabled
+            // Handle test mode - redirect emails if enabled (unless bypassed by automated system)
             let finalRecipientEmail = recipientEmail;
             let isTestMode = false;
-            
-            if (userSettings.settings.test_mode && userSettings.settings.test_mode_recipient) {
+
+            if (!bypassPersonalTestMode && userSettings.settings.test_mode && userSettings.settings.test_mode_recipient) {
                 finalRecipientEmail = userSettings.settings.test_mode_recipient;
                 isTestMode = true;
                 console.log(`🧪 TEST MODE: Email for ${recipientEmail} redirected to ${finalRecipientEmail}`);
+            } else if (bypassPersonalTestMode && userSettings.settings.test_mode) {
+                console.log(`🔧 Personal test mode bypassed (global test mode active)`);
             }
 
             // Modify subject and body if in test mode

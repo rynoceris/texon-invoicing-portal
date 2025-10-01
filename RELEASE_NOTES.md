@@ -887,7 +887,173 @@
 
 ---
 
+## Version 2.0.1 - Opt-out System & Sender Configuration (October 2025)
+
+### 🎉 Major Features
+
+#### 🚫 Customer Opt-out System
+- **Email opt-out functionality** with one-click unsubscribe links in all automated emails
+- **Public opt-out API endpoint** allowing customers to manage email preferences without authentication
+- **Granular opt-out controls** with separate flags for reminders, collections, and all emails
+- **Opt-out database tracking** in customer_email_preferences table
+- **Test mode opt-out support** properly checking opt-out status for test recipients
+- **Dual opt-out verification** checking both original recipient and test mode recipient
+
+#### 📧 Automation Sender Email Configuration
+- **UI-based sender email configuration** in Automated Email Settings page
+- **Auto-save functionality** with blur event handling for seamless updates
+- **User validation** ensuring sender email matches active user with email settings
+- **Google App Password verification** confirming email credentials exist
+- **Settings persistence** in app_settings table with automation_sender_email key
+- **Backend API endpoint** for secure sender email updates
+
+#### 🔗 Environment-aware URL Generation
+- **NODE_ENV-based URL selection** for development vs production environments
+- **Localhost support** for local testing (http://localhost:3002)
+- **Production URL** automatic selection in production environment
+- **BASE_URL override** support for custom deployment scenarios
+- **Opt-out link reliability** with proper URL generation in all environments
+
+### 🛠 Technical Improvements
+
+#### Backend Enhancements
+- **Enhanced automated-email-service.js** with dual opt-out checking (lines 371-405)
+- **Updated getDefaultEmailUser()** checking automation_sender_email setting first (lines 654-712)
+- **New setSenderEmail() API method** in automated-email-controller.js (lines 1020-1091)
+- **Environment-aware opt-out links** in email-service.js (lines 287-294)
+- **Enhanced getSystemStatus()** returning automationSenderEmail (lines 838-852)
+
+#### Frontend Development
+- **AutomatedEmailSettings.js updates** with automation sender email input (lines 1069-1118)
+- **State management** for automationSenderEmail with auto-save on blur
+- **API integration** for sender email updates with error handling
+- **User feedback** with success/error messages for configuration changes
+- **Settings tab enhancement** with sender email configuration UI
+
+#### Database Updates
+- **Email template updates** adding opt-out link placeholder {OPT_OUT_LINK}
+- **app_settings table** storing automation_sender_email configuration
+- **customer_email_preferences table** tracking opt-out status per customer
+- **Database cleanup utilities** for clearing test data (clear-test-emails.sql)
+
+### 🔧 System Features
+
+#### Opt-out Management
+- **Base64 token generation** for secure opt-out links without authentication
+- **Email and timestamp encoding** preventing token reuse and manipulation
+- **Public API endpoint** (/api/public/opt-out) accessible without JWT
+- **Database persistence** storing opt-out preferences permanently
+- **Opt-out verification** during email sending preventing unwanted communications
+- **Skip reasons tracking** differentiating customer opt-out vs test recipient opt-out
+
+#### Sender Email Control
+- **Centralized sender configuration** eliminating hardcoded email addresses
+- **First user fallback** when automation_sender_email not configured
+- **Email settings validation** ensuring sender has configured Google App Password
+- **Real-time updates** applying sender email changes immediately
+- **Settings visibility** showing current automation sender in system status
+
+### 🐛 Bug Fixes & Optimizations
+
+#### Opt-out System Fixes
+- **Fixed missing opt-out links** in automated email templates
+- **Corrected opt-out link URLs** using NODE_ENV for environment detection
+- **Fixed opt-out in test mode** with dual verification (original + test recipient)
+- **Resolved automation_activity view error** deleting from underlying table instead
+- **Test mode redirect logic** checking opt-out after global test email substitution
+
+#### Sender Email Fixes
+- **Fixed wrong sender email** (stephanie@texontowel.com → ryan@texontowel.com)
+- **Eliminated manual database updates** with UI configuration interface
+- **User validation** ensuring sender email exists with proper credentials
+- **Logging improvements** showing which email address is being used as sender
+
+#### Email Template Corrections
+- **Added opt-out link footer** to all active email templates
+- **Template format standardization** with consistent opt-out placement
+- **Database template updates** via SQL script (fix-email-issues.sql)
+
+### 🔒 Security & Compliance
+
+#### Email Preferences Protection
+- **Secure opt-out tokens** with email and timestamp encoding
+- **Public endpoint security** with proper input validation
+- **Database access controls** for customer preferences
+- **Opt-out enforcement** preventing emails to opted-out customers
+
+#### Configuration Security
+- **Email validation** with regex format checking
+- **User authentication** required for sender email updates
+- **Google App Password verification** ensuring valid email credentials
+- **Error sanitization** preventing sensitive data exposure
+
+### 📊 Performance Metrics
+
+#### System Performance
+- **Opt-out check efficiency** with indexed database queries
+- **Dual verification** adding minimal overhead to email processing
+- **Environment detection** with zero additional latency
+- **Settings caching** reducing database queries for sender email lookup
+
+#### User Experience Metrics
+- **One-click opt-out** providing immediate preference updates
+- **Auto-save configuration** eliminating manual save button clicks
+- **Real-time feedback** with instant validation and error messages
+- **Seamless test mode** with proper opt-out respect in all scenarios
+
+### 🚀 Testing & Validation
+
+#### Opt-out Testing
+- **Database view vs table** differentiation and proper deletion
+- **Test mode verification** ensuring opted-out test recipients don't receive emails
+- **Global test mode redirect** with secondary opt-out checking
+- **End-to-end validation** from opt-out link click to preference storage
+
+#### Sender Email Testing
+- **UI configuration** validation with proper error handling
+- **Email settings verification** confirming Google App Password exists
+- **User lookup** ensuring sender email matches active user
+- **Fallback behavior** testing when automation_sender_email not configured
+
+### 📈 Business Impact
+
+#### Customer Experience
+- **Opt-out compliance** respecting customer communication preferences
+- **One-click unsubscribe** meeting email marketing best practices
+- **Reduced spam complaints** with clear opt-out mechanisms
+- **Improved email reputation** through preference management
+
+#### Operational Efficiency
+- **UI-based configuration** eliminating manual database updates
+- **Centralized sender control** simplifying email management
+- **Test mode reliability** with proper opt-out checking
+- **Automated preference tracking** with comprehensive database logging
+
+### 🔮 Technical Foundation
+
+#### Email Preference System
+- **customer_email_preferences table** supporting future granular controls
+- **Opt-out API endpoints** ready for additional preference types
+- **Token-based authentication** for public-facing customer actions
+- **Database schema** prepared for expanded preference management
+
+#### Configuration Framework
+- **app_settings table** supporting additional automation configurations
+- **UI auto-save pattern** reusable for other settings
+- **Validation pipeline** ensuring data integrity for all settings
+- **Settings API endpoints** scalable for future configuration needs
+
+---
+
 ## Version History
+
+### v2.0.1 (October 2025)
+- Customer opt-out system with one-click unsubscribe links
+- UI-based automation sender email configuration
+- Environment-aware URL generation for opt-out links
+- Dual opt-out verification for test mode reliability
+- Email template updates with opt-out link placeholders
+- Fixed wrong sender email issue with centralized configuration
 
 ### v2.0.0 (September 2025)
 - Comprehensive automated email campaign system with four-tier reminder structure

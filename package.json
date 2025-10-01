@@ -1,6 +1,6 @@
 {
   "name": "texon-invoicing-portal",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Texon invoicing portal for Brightpearl unpaid invoices",
   "main": "server.js",
   "scripts": {

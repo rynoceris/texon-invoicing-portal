@@ -107,7 +107,7 @@ class AutomatedEmailController {
      */
     async getScheduledEmails(req, res) {
         try {
-            const { limit = 50, status = 'all', days = 7 } = req.query;
+            const { limit = 50, status = 'all', days = 30 } = req.query;
             const userId = req.user?.userId;
 
             if (!userId) {
@@ -117,6 +117,7 @@ class AutomatedEmailController {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - parseInt(days));
 
+            // First, get scheduled emails with campaign info
             let query = this.automatedEmailService.supabase
                 .from('automated_email_schedule')
                 .select(`
@@ -138,6 +139,29 @@ class AutomatedEmailController {
             const { data, error } = await query;
 
             if (error) throw error;
+
+            // Now enrich with invoice data (manual join since no FK exists)
+            if (data && data.length > 0) {
+                const orderIds = data.map(email => email.order_id);
+
+                const { data: invoices, error: invoiceError } = await this.automatedEmailService.supabase
+                    .from('cached_invoices')
+                    .select('id, invoice_number, billing_contact_name, billing_contact_email')
+                    .in('id', orderIds);
+
+                if (!invoiceError && invoices) {
+                    // Create a map for quick lookup
+                    const invoiceMap = {};
+                    invoices.forEach(inv => {
+                        invoiceMap[inv.id] = inv;
+                    });
+
+                    // Enrich scheduled emails with invoice data
+                    data.forEach(email => {
+                        email.cached_invoices = invoiceMap[email.order_id] || null;
+                    });
+                }
+            }
 
             res.json({
                 success: true,
@@ -811,6 +835,13 @@ class AutomatedEmailController {
             const globalTestMode = await this.automatedEmailService.getGlobalTestMode();
             const globalTestEmail = await this.automatedEmailService.getGlobalTestEmail();
 
+            // Get automation sender email
+            const { data: senderEmailData } = await this.automatedEmailService.supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'automation_sender_email')
+                .single();
+
             const status = {
                 systemActive: (campaigns?.length || 0) > 0,
                 schedulerRunning: schedulerStatus.running,
@@ -818,6 +849,7 @@ class AutomatedEmailController {
                 testMode: emailSettings?.test_mode || false,
                 globalTestMode: globalTestMode,
                 globalTestEmail: globalTestEmail,
+                automationSenderEmail: senderEmailData?.value || '',
                 lastRunAt: recentRuns?.[0]?.run_started_at || null,
                 lastRunStatus: recentRuns?.[0]?.status || 'unknown',
                 lastRunEmailsSent: recentRuns?.[0]?.emails_sent || 0
@@ -989,6 +1021,79 @@ class AutomatedEmailController {
             });
         } catch (error) {
             console.error('❌ Error setting global test email:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    /**
+     * Set automation sender email
+     */
+    async setSenderEmail(req, res) {
+        try {
+            const { email } = req.body;
+            const userId = req.user?.userId;
+
+            if (!userId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            if (!email || typeof email !== 'string') {
+                return res.status(400).json({ error: 'Valid email address is required' });
+            }
+
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({ error: 'Invalid email format' });
+            }
+
+            // Verify that a user exists with this email in their email settings
+            const { data: userData, error: userError } = await this.automatedEmailService.supabase
+                .from('app_users')
+                .select(`
+                    id,
+                    first_name,
+                    last_name,
+                    user_email_settings!inner(email_address)
+                `)
+                .eq('is_active', true)
+                .eq('user_email_settings.email_address', email)
+                .not('user_email_settings.google_app_password', 'is', null)
+                .limit(1)
+                .single();
+
+            if (userError || !userData) {
+                return res.status(400).json({
+                    error: 'No active user found with this email address in their email settings',
+                    message: 'Please ensure the email address matches a user who has configured their email settings'
+                });
+            }
+
+            // Update the setting
+            const { error: updateError } = await this.automatedEmailService.supabase
+                .from('app_settings')
+                .upsert({
+                    key: 'automation_sender_email',
+                    value: email,
+                    category: 'automation',
+                    description: 'Email address to use as sender for automated emails'
+                }, {
+                    onConflict: 'key'
+                });
+
+            if (updateError) {
+                throw updateError;
+            }
+
+            console.log(`📧 Automation sender email set to ${email} by user ${userId}`);
+
+            res.json({
+                success: true,
+                message: 'Automation sender email updated successfully',
+                automationSenderEmail: email
+            });
+        } catch (error) {
+            console.error('❌ Error setting automation sender email:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     }

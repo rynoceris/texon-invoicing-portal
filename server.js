@@ -3197,6 +3197,96 @@ app.get('/texon-invoicing-portal/api/automated-emails/preview', authenticateToke
     }
 });
 
+// Public opt-out link (no authentication required)
+app.get('/texon-invoicing-portal/api/public/opt-out', async (req, res) => {
+    try {
+        const { token } = req.query;
+
+        if (!token) {
+            return res.status(400).send(`
+                <html>
+                    <head><title>Invalid Link</title></head>
+                    <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+                        <h1>❌ Invalid Opt-out Link</h1>
+                        <p>The opt-out link is invalid or has expired.</p>
+                    </body>
+                </html>
+            `);
+        }
+
+        // Decode the token (format: email:timestamp)
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [email, timestamp] = decoded.split(':');
+
+        if (!email) {
+            return res.status(400).send(`
+                <html>
+                    <head><title>Invalid Link</title></head>
+                    <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+                        <h1>❌ Invalid Opt-out Link</h1>
+                        <p>The opt-out link is malformed.</p>
+                    </body>
+                </html>
+            `);
+        }
+
+        // Add to opt-out list
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_KEY,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        );
+
+        const { error } = await supabase
+            .from('customer_email_preferences')
+            .upsert({
+                email_address: email.toLowerCase(),
+                opted_out_reminders: true,
+                opt_out_date: new Date().toISOString(),
+                opt_out_reason: 'Customer clicked opt-out link in email'
+            }, { onConflict: 'email_address' });
+
+        if (error) throw error;
+
+        console.log(`🚫 Customer ${email} opted out via public link`);
+
+        res.send(`
+            <html>
+                <head>
+                    <title>Successfully Opted Out</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f5f5f5; }
+                        .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                        h1 { color: #28a745; }
+                        p { color: #666; line-height: 1.6; }
+                        .email { color: #007bff; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>✅ Successfully Opted Out</h1>
+                        <p>The email address <span class="email">${email}</span> has been removed from our automated payment reminder emails.</p>
+                        <p>You will no longer receive automated payment reminders from Texon Towel.</p>
+                        <p>If you have any questions, please contact our support team.</p>
+                    </div>
+                </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('❌ Error in public opt-out route:', error);
+        res.status(500).send(`
+            <html>
+                <head><title>Error</title></head>
+                <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+                    <h1>❌ Error Processing Request</h1>
+                    <p>An error occurred while processing your opt-out request. Please try again later.</p>
+            </body>
+            </html>
+        `);
+    }
+});
+
 // Customer opt-out management
 app.post('/texon-invoicing-portal/api/automated-emails/opt-out', authenticateToken, async (req, res) => {
     try {
@@ -3421,6 +3511,22 @@ app.post('/texon-invoicing-portal/api/automated-emails/global-test-email', authe
         await automatedEmailController.setGlobalTestEmail(req, res);
     } catch (error) {
         console.error('❌ Error in set global test email route:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Set automation sender email
+app.post('/texon-invoicing-portal/api/automated-emails/sender-email', authenticateToken, async (req, res) => {
+    try {
+        if (!automatedEmailController) {
+            return res.status(503).json({
+                error: 'Automated email service not available',
+                message: 'Environment variables not configured for automated emails'
+            });
+        }
+        await automatedEmailController.setSenderEmail(req, res);
+    } catch (error) {
+        console.error('❌ Error in set sender email route:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

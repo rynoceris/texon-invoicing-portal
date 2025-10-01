@@ -761,3 +761,39 @@
         padding: 20px 15px;
     }
 }
+/* Sortable columns */
+.table-header .sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.table-header .sortable:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Error column */
+.col-error {
+    flex: 0 0 150px;
+    padding: 10px;
+    font-size: 0.85rem;
+}
+
+.error-text {
+    color: #dc3545;
+    font-size: 0.85rem;
+    display: block;
+    word-break: break-word;
+}
+
+.error-text:hover {
+    cursor: help;
+}
+
+/* Update existing column widths to accommodate error column */
+.emails-table .table-header,
+.emails-table .table-row {
+    display: grid;
+    grid-template-columns: 100px 200px 150px 150px 140px 140px 150px;
+    gap: 10px;
+}

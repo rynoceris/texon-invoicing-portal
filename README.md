@@ -2,11 +2,20 @@
 
 A comprehensive financial operations platform built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, provide advanced analytics, automate contact enrichment, and streamline customer communications with intelligent automation.
 
-## 🎉 Latest Release - v2.0.0
+## 🎉 Latest Release - v2.0.1
 
-**🚀 Major Release - September 2025:**
+**🔧 Minor Release - October 2025:**
 
-We've completed a **MAJOR** release implementing a comprehensive **automated email campaign system** that transforms the portal into a fully automated collections platform!
+We've completed a **patch release** adding critical **opt-out functionality** and **sender email configuration** to enhance compliance and user control!
+
+### 🚫 New Features
+- **Customer opt-out system** with one-click unsubscribe links in all automated emails
+- **UI-based sender email configuration** eliminating manual database updates
+- **Environment-aware URL generation** for development and production deployments
+- **Dual opt-out verification** ensuring test mode respects customer preferences
+
+**Previous major release:**
+- **v2.0.0** - Comprehensive automated email campaign system (September 2025)
 
 ### 📧 Automated Email Campaigns
 - **Four-tier campaign system** (Reminder 1, 2, 3, and Final Notice)
@@ -50,7 +59,7 @@ We've completed a **MAJOR** release implementing a comprehensive **automated ema
 - **v1.1.1**: Enhanced PDF generation, amount due calculations, logo integration
 - **v1.1.0**: Analytics dashboard, contact enrichment, cash flow visualization
 
-[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
+[![Version](https://img.shields.io/badge/version-2.0.1-brightgreen)](https://github.com/rynoceris/texon-invoicing-portal)
 [![Email Automation](https://img.shields.io/badge/email-automated-blue)](https://github.com/rynoceris/texon-invoicing-portal)
 [![Analytics](https://img.shields.io/badge/analytics-Chart.js-blue)](https://www.chartjs.org/)
 [![Performance](https://img.shields.io/badge/performance-+70%25-green)](https://github.com/rynoceris/texon-invoicing-portal)

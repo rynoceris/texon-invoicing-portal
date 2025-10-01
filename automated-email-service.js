@@ -116,6 +116,12 @@ class AutomatedEmailService {
             totalFailed += scheduleResult.failed;
             totalSkipped += scheduleResult.skipped;
 
+            // Clean up test emails if in test mode
+            if (testMode) {
+                await this.cleanupTestEmails();
+                console.log('🧹 Test emails cleaned up');
+            }
+
             // Complete automation log
             await this.updateAutomationLog(
                 logId,
@@ -236,7 +242,8 @@ class AutomatedEmailService {
                         recipientEmail: invoice.billing_contact_email,
                         scheduledDate: new Date(),
                         status: 'skipped',
-                        skipReason: 'customer_opted_out'
+                        skipReason: 'customer_opted_out',
+                        isTest: testMode
                     });
                     skipped++;
                     continue;
@@ -248,7 +255,8 @@ class AutomatedEmailService {
                     campaignId: campaign.id,
                     orderId: invoice.id,
                     recipientEmail: invoice.billing_contact_email,
-                    scheduledDate: scheduleDate
+                    scheduledDate: scheduleDate,
+                    isTest: testMode
                 });
 
                 console.log(`   📧 Scheduled email for order ${invoice.order_reference} (${daysOutstanding} days overdue)`);
@@ -301,8 +309,8 @@ class AutomatedEmailService {
         try {
             const today = new Date().toISOString().split('T')[0];
 
-            // Get all pending emails scheduled for today
-            const { data: scheduledEmails, error } = await this.supabase
+            // Get all pending emails scheduled for today (only test emails in test mode, only real emails in production)
+            let query = this.supabase
                 .from('automated_email_schedule')
                 .select(`
                     *,
@@ -314,7 +322,10 @@ class AutomatedEmailService {
                 .eq('scheduled_date', today)
                 .eq('status', 'pending')
                 .lt('attempt_count', 3) // Don't retry more than 3 times
+                .eq('is_test', testMode) // Only get test emails in test mode, only real emails in production mode
                 .order('created_at', { ascending: true });
+
+            const { data: scheduledEmails, error } = await query;
 
             if (error) throw error;
 
@@ -357,6 +368,17 @@ class AutomatedEmailService {
                         continue;
                     }
 
+                    // Check if customer has opted out (check before sending, not just during scheduling)
+                    console.log(`🔍 Checking opt-out status for ${scheduledEmail.recipient_email}...`);
+                    const isOptedOut = await this.isCustomerOptedOut(scheduledEmail.recipient_email);
+                    console.log(`   Opted out: ${isOptedOut}`);
+                    if (isOptedOut) {
+                        console.log(`🚫 Skipping order ${invoiceData.order_reference} - customer opted out after scheduling`);
+                        await this.updateScheduledEmailStatus(scheduledEmail.id, 'skipped', 'customer_opted_out');
+                        skipped++;
+                        continue;
+                    }
+
                     // Check if global test mode is enabled and get global test email
                     const globalTestMode = await this.getGlobalTestMode();
                     const globalTestEmail = globalTestMode ? await this.getGlobalTestEmail() : null;
@@ -369,11 +391,23 @@ class AutomatedEmailService {
                     // Log if global test mode is redirecting emails
                     if (globalTestMode && globalTestEmail && recipientEmail !== scheduledEmail.recipient_email) {
                         console.log(`🧪 Global test mode: redirecting email from ${scheduledEmail.recipient_email} to ${recipientEmail}`);
+
+                        // ALSO check if the test email recipient has opted out
+                        console.log(`🔍 Checking opt-out status for test recipient ${recipientEmail}...`);
+                        const testRecipientOptedOut = await this.isCustomerOptedOut(recipientEmail);
+                        console.log(`   Test recipient opted out: ${testRecipientOptedOut}`);
+                        if (testRecipientOptedOut) {
+                            console.log(`🚫 Skipping order ${invoiceData.order_reference} - test recipient opted out`);
+                            await this.updateScheduledEmailStatus(scheduledEmail.id, 'skipped', 'test_recipient_opted_out');
+                            skipped++;
+                            continue;
+                        }
                     }
 
                     // Generate PDF attachment for the invoice
                     console.log(`📄 Generating PDF invoice for automated email...`);
                     const pdfOrderData = {
+                        id: scheduledEmail.order_id,
                         customerName: invoiceData.billing_contact_name,
                         reference: invoiceData.order_reference,
                         invoiceNumber: invoiceData.invoice_number,
@@ -403,7 +437,7 @@ class AutomatedEmailService {
                         // Continue without attachment if PDF generation fails
                     }
 
-                    // Send the email
+                    // Send the email (bypass personal test mode if global test mode is active)
                     const emailResult = await this.emailService.sendEmail({
                         userId: defaultUser.id,
                         orderId: scheduledEmail.order_id,
@@ -411,7 +445,8 @@ class AutomatedEmailService {
                         emailType: scheduledEmail.automated_email_campaigns.template_type,
                         orderData: pdfOrderData,
                         attachments: attachments,
-                        senderName: defaultUser.first_name ? `${defaultUser.first_name} ${defaultUser.last_name}` : 'Texon Towel'
+                        senderName: defaultUser.first_name ? `${defaultUser.first_name} ${defaultUser.last_name}` : 'Texon Towel',
+                        bypassPersonalTestMode: globalTestMode  // Bypass personal test mode when global test mode is active
                     });
 
                     if (emailResult.success) {
@@ -514,6 +549,7 @@ class AutomatedEmailService {
 
     /**
      * Check if email is already scheduled for a campaign/order combination
+     * Excludes test emails from the check
      */
     async isEmailAlreadyScheduled(campaignId, orderId, daysOutstanding = null) {
         let query = this.supabase
@@ -521,7 +557,8 @@ class AutomatedEmailService {
             .select('id')
             .eq('campaign_id', campaignId)
             .eq('order_id', orderId)
-            .in('status', ['pending', 'sent']);
+            .in('status', ['pending', 'sent'])
+            .eq('is_test', false); // Exclude test emails
 
         // For recurring campaigns, check if we already sent for this specific day range
         if (daysOutstanding !== null) {
@@ -554,7 +591,7 @@ class AutomatedEmailService {
     /**
      * Schedule an email
      */
-    async scheduleEmail({ campaignId, orderId, recipientEmail, scheduledDate, status = 'pending', skipReason = null }) {
+    async scheduleEmail({ campaignId, orderId, recipientEmail, scheduledDate, status = 'pending', skipReason = null, isTest = false }) {
         const { error } = await this.supabase
             .from('automated_email_schedule')
             .insert({
@@ -563,7 +600,8 @@ class AutomatedEmailService {
                 recipient_email: recipientEmail.toLowerCase(),
                 scheduled_date: scheduledDate.toISOString().split('T')[0],
                 status: status,
-                skip_reason: skipReason
+                skip_reason: skipReason,
+                is_test: isTest
             });
 
         if (error) throw error;
@@ -573,10 +611,20 @@ class AutomatedEmailService {
      * Update scheduled email attempt count
      */
     async updateScheduledEmailAttempt(scheduleId) {
+        // First, get the current attempt count
+        const { data: currentData, error: fetchError } = await this.supabase
+            .from('automated_email_schedule')
+            .select('attempt_count')
+            .eq('id', scheduleId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        // Then increment it
         const { error } = await this.supabase
             .from('automated_email_schedule')
             .update({
-                attempt_count: this.supabase.raw('attempt_count + 1'),
+                attempt_count: (currentData?.attempt_count || 0) + 1,
                 last_attempt_at: new Date().toISOString()
             })
             .eq('id', scheduleId);
@@ -622,18 +670,67 @@ class AutomatedEmailService {
 
     /**
      * Get default user for sending automated emails
-     * You may want to configure this or allow multiple users
+     * First checks for a configured default sender in app_settings
+     * Falls back to the first active user who has email settings configured
      */
     async getDefaultEmailUser() {
-        const { data, error } = await this.supabase
-            .from('app_users')
-            .select('id, first_name, last_name, email')
-            .eq('is_active', true)
-            .limit(1)
-            .single();
+        try {
+            // Check for configured default sender email
+            const { data: settingData, error: settingError } = await this.supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'automation_sender_email')
+                .single();
 
-        if (error) return null;
-        return data;
+            if (!settingError && settingData?.value) {
+                // Find user by email address in their email settings
+                const { data: userData, error: userError } = await this.supabase
+                    .from('app_users')
+                    .select(`
+                        id,
+                        first_name,
+                        last_name,
+                        email,
+                        user_email_settings!inner(id, email_address, google_app_password)
+                    `)
+                    .eq('is_active', true)
+                    .eq('user_email_settings.email_address', settingData.value)
+                    .not('user_email_settings.google_app_password', 'is', null)
+                    .limit(1)
+                    .single();
+
+                if (!userError && userData) {
+                    console.log(`📧 Using configured automation sender: ${settingData.value}`);
+                    return userData;
+                }
+            }
+
+            // Fallback to first active user with email settings
+            const { data, error } = await this.supabase
+                .from('app_users')
+                .select(`
+                    id,
+                    first_name,
+                    last_name,
+                    email,
+                    user_email_settings!inner(id, email_address, google_app_password)
+                `)
+                .eq('is_active', true)
+                .not('user_email_settings.google_app_password', 'is', null)
+                .limit(1)
+                .single();
+
+            if (error) {
+                console.error('❌ Error getting default email user:', error);
+                return null;
+            }
+
+            console.log(`📧 Using default automation sender: ${data.user_email_settings[0]?.email_address}`);
+            return data;
+        } catch (error) {
+            console.error('❌ Error in getDefaultEmailUser:', error);
+            return null;
+        }
     }
 
     /**
@@ -664,7 +761,10 @@ class AutomatedEmailService {
                 .from('app_settings')
                 .upsert({
                     key: 'automation_global_test_mode',
-                    value: String(enabled)
+                    value: String(enabled),
+                    category: 'automation'
+                }, {
+                    onConflict: 'key'
                 });
 
             if (error) throw error;
@@ -697,7 +797,10 @@ class AutomatedEmailService {
                 .from('app_settings')
                 .upsert({
                     key: 'automation_global_test_email',
-                    value: email
+                    value: email,
+                    category: 'automation'
+                }, {
+                    onConflict: 'key'
                 });
 
             if (error) throw error;
@@ -730,10 +833,30 @@ class AutomatedEmailService {
             totalEmailsSent: data.reduce((sum, log) => sum + (log.emails_sent || 0), 0),
             totalEmailsFailed: data.reduce((sum, log) => sum + (log.emails_failed || 0), 0),
             totalEmailsScheduled: data.reduce((sum, log) => sum + (log.emails_scheduled || 0), 0),
+            // Add frontend-expected field names
+            successfulEmails: data.reduce((sum, log) => sum + (log.emails_sent || 0), 0),
+            failedEmails: data.reduce((sum, log) => sum + (log.emails_failed || 0), 0),
+            automationRuns: data.length,
+            uniqueCustomers: 0, // TODO: Calculate from scheduled emails if needed
             recentLogs: data.slice(0, 10)
         };
 
         return stats;
+    }
+
+    /**
+     * Clean up test emails (delete all test emails from the schedule)
+     */
+    async cleanupTestEmails() {
+        const { error } = await this.supabase
+            .from('automated_email_schedule')
+            .delete()
+            .eq('is_test', true);
+
+        if (error) {
+            console.error('❌ Error cleaning up test emails:', error);
+            throw error;
+        }
     }
 
     /**

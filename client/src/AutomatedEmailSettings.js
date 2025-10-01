@@ -10,7 +10,9 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [globalTestEmail, setGlobalTestEmail] = useState('');
+    const [automationSenderEmail, setAutomationSenderEmail] = useState('');
     const [campaignToEdit, setCampaignToEdit] = useState(null);
+    const [testRunning, setTestRunning] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -40,6 +42,7 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
                 const data = await response.json();
                 setSystemStatus(data.status);
                 setGlobalTestEmail(data.status.globalTestEmail || '');
+                setAutomationSenderEmail(data.status.automationSenderEmail || '');
             } else {
                 console.error('Error loading system status:', response.status, response.statusText);
             }
@@ -120,6 +123,11 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
     };
 
     const runManualTest = async () => {
+        if (testRunning) return; // Prevent multiple clicks
+
+        setTestRunning(true);
+        setMessage({ text: 'Running test automation... This may take up to 30 seconds.', type: 'info' });
+
         try {
             const response = await fetch(`${API_BASE}/automated-emails/run`, {
                 method: 'POST',
@@ -142,6 +150,8 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
         } catch (error) {
             console.error('Error running test automation:', error);
             setMessage({ text: 'Error running test automation', type: 'error' });
+        } finally {
+            setTestRunning(false);
         }
     };
 
@@ -226,8 +236,13 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
                 </div>
 
                 <div className="quick-actions">
-                    <button className="btn-secondary" onClick={runManualTest}>
-                        🧪 Run Test Automation
+                    <button
+                        className="btn-secondary"
+                        onClick={runManualTest}
+                        disabled={testRunning}
+                        style={{ opacity: testRunning ? 0.6 : 1, cursor: testRunning ? 'wait' : 'pointer' }}
+                    >
+                        {testRunning ? '⏳ Processing...' : '🧪 Run Test Automation'}
                     </button>
                     <button className="btn-secondary" onClick={() => setActiveTab('reports')}>
                         📊 View Reports
@@ -321,6 +336,8 @@ const AutomatedEmailSettings = ({ token, user, setCurrentTab }) => {
                         setMessage={setMessage}
                         globalTestEmail={globalTestEmail}
                         setGlobalTestEmail={setGlobalTestEmail}
+                        automationSenderEmail={automationSenderEmail}
+                        setAutomationSenderEmail={setAutomationSenderEmail}
                         setSystemStatus={setSystemStatus}
                         setCurrentTab={setCurrentTab}
                     />
@@ -911,7 +928,7 @@ const ReportsTab = ({ token, setMessage }) => {
                     <h4>Last 30 Days Summary</h4>
                     <div className="stats-grid">
                         <div className="stat-item">
-                            <div className="stat-value">{stats.totalEmails || 0}</div>
+                            <div className="stat-value">{stats.totalEmailsSent || 0}</div>
                             <div className="stat-label">Total Emails Sent</div>
                         </div>
                         <div className="stat-item">
@@ -926,7 +943,7 @@ const ReportsTab = ({ token, setMessage }) => {
 };
 
 // Settings Tab Component
-const SettingsTab = ({ systemStatus, onReload, token, setMessage, globalTestEmail, setGlobalTestEmail, setSystemStatus, setCurrentTab }) => {
+const SettingsTab = ({ systemStatus, onReload, token, setMessage, globalTestEmail, setGlobalTestEmail, automationSenderEmail, setAutomationSenderEmail, setSystemStatus, setCurrentTab }) => {
     return (
         <div className="settings-tab">
             <h3>⚙️ System Settings</h3>
@@ -990,7 +1007,7 @@ const SettingsTab = ({ systemStatus, onReload, token, setMessage, globalTestEmai
                                     }
                                 }}
                             />
-                            <span className="slider"></span>
+                            <span className="toggle-slider"></span>
                         </label>
                         <span style={{ marginLeft: '10px' }}>
                             {systemStatus?.globalTestMode ? 'Enabled' : 'Disabled'}
@@ -1047,6 +1064,56 @@ const SettingsTab = ({ systemStatus, onReload, token, setMessage, globalTestEmai
                         />
                         <small style={{ display: 'block', color: '#666', marginTop: '4px' }}>
                             Email address used when global test mode is enabled
+                        </small>
+                    </div>
+                    <div className="safety-item">
+                        <strong>Automation Sender Email:</strong>
+                        <input
+                            type="email"
+                            value={automationSenderEmail}
+                            onChange={(e) => setAutomationSenderEmail(e.target.value)}
+                            onBlur={async () => {
+                                if (automationSenderEmail && automationSenderEmail !== systemStatus?.automationSenderEmail) {
+                                    try {
+                                        const response = await fetch(`${API_BASE}/automated-emails/sender-email`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Authorization': `Bearer ${token}`,
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({ email: automationSenderEmail })
+                                        });
+                                        if (response.ok) {
+                                            setMessage({
+                                                text: 'Automation sender email updated successfully',
+                                                type: 'success'
+                                            });
+                                            setSystemStatus(prev => ({
+                                                ...prev,
+                                                automationSenderEmail: automationSenderEmail
+                                            }));
+                                        } else {
+                                            throw new Error('Failed to update automation sender email');
+                                        }
+                                    } catch (error) {
+                                        console.error('Error updating automation sender email:', error);
+                                        setMessage({ text: 'Error updating automation sender email', type: 'error' });
+                                        setAutomationSenderEmail(systemStatus?.automationSenderEmail || '');
+                                    }
+                                }
+                            }}
+                            placeholder="sender@example.com"
+                            style={{
+                                marginLeft: '10px',
+                                padding: '4px 8px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                fontSize: '14px',
+                                width: '200px'
+                            }}
+                        />
+                        <small style={{ display: 'block', color: '#666', marginTop: '4px' }}>
+                            Email address used as sender for all automated emails (must have configured email settings)
                         </small>
                     </div>
                     <div className="safety-item">

@@ -2,26 +2,29 @@
 
 > **Evolving from comprehensive invoice management into an enterprise-grade financial operations platform**
 
-[![Version](https://img.shields.io/badge/current-v2.0.0-green.svg)](https://github.com/texon-towel/texon-invoicing-portal)
+[![Version](https://img.shields.io/badge/current-v2.0.1-green.svg)](https://github.com/texon-towel/texon-invoicing-portal)
 [![Next Release](https://img.shields.io/badge/next-v2.1.0-blue.svg)]()
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen.svg)]()
 
 ---
 
-## 🎉 **Latest Release Highlights - v2.0.0**
+## 🎉 **Latest Release Highlights - v2.0.1**
 
-**🚀 Just Released: September 2025**
+**🔧 Just Released: October 2025**
 
-We've completed a **MAJOR** release implementing comprehensive **automated email campaign system**:
+We've completed a **patch release** adding critical **opt-out functionality** and **sender email configuration**:
 
-- **📧 Fully Automated Email Campaigns**: Four-tier reminder system with intelligent scheduling
-- **🎨 Advanced Template Editor**: Rich customization with 11 dynamic variables
-- **📊 Campaign Management Dashboard**: Real-time monitoring and statistics tracking
-- **✉️ PDF Invoice Attachments**: Professional branded invoices with all automated emails
-- **🎯 Smart Targeting**: Invoice age-based campaign selection with duplicate prevention
-- **🔧 UI/UX Improvements**: Fixed Email Settings layout issues and enhanced Templates tab
+- **🚫 Customer Opt-out System**: One-click unsubscribe links in all automated emails with preference tracking
+- **📧 Sender Email Configuration**: UI-based automation sender email setup eliminating manual database edits
+- **🌐 Environment-aware URLs**: Automatic URL selection for development vs production environments
+- **✅ Test Mode Reliability**: Dual opt-out verification respecting customer preferences in test scenarios
+- **🔗 Template Updates**: Opt-out link placeholders added to all active email templates
+- **🛠️ Bug Fixes**: Corrected sender email issues and improved test mode opt-out checking
 
-This release transforms the portal into a **fully automated collections platform** with enterprise-grade email automation!
+This release enhances **compliance and user control** with comprehensive opt-out management and streamlined configuration!
+
+**Previous major release:**
+- **v2.0.0** - Comprehensive automated email campaign system (September 2025)
 
 ---
 
@@ -38,6 +41,7 @@ Our goal is to evolve the Texon Invoicing Portal from a powerful invoice managem
 | **v1.0.0** | ✅ **Complete** | Core invoicing & email automation | 🟢 Released |
 | **v1.1.0** | ✅ **Complete** | Analytics dashboard & contact enrichment | 🟢 Released |
 | **v2.0.0** | ✅ **Complete** | Automated email campaigns & advanced templates | 🟢 Released |
+| **v2.0.1** | ✅ **Complete** | Opt-out system & sender email configuration | 🟢 Released |
 | **v2.1.0** | 🔮 **Q2 2026** | Advanced campaign analytics & A/B testing | 🔮 Future |
 | **v2.2.0** | 🔮 **Q3 2026** | Multi-channel communications (SMS, calls) | 🔮 Future |
 | **v2.3.0** | 🔮 **Q4 2026** | Enhanced UX & mobile optimization | 🔮 Future |
