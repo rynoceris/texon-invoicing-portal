@@ -623,16 +623,20 @@ class SupabaseBrightpearlService {
 
         try {
             const paymentsByOrder = {};
-            const batchSize = 1000; // Process in batches to handle large datasets
+            const batchSize = 1000;
             let offset = 0;
             let hasMoreData = true;
             let totalPaymentsProcessed = 0;
 
-            console.log(`💰 Loading customer payment data for ${orderIds.length} orders...`);
+            // Use the aggregate 'payment' table instead of 'customerpayment'.
+            // The 'payment' table provides a single rolled-up record per order with
+            // correct net amountpaid that accounts for reversals. Summing from
+            // 'customerpayment' double-counts reversed payments as positive amounts.
+            console.log(`💰 Loading payment data for ${orderIds.length} orders (using aggregate payment table)...`);
 
             while (hasMoreData) {
                 const { data, error } = await this.supabase
-                    .from('customerpayment')
+                    .from('payment')
                     .select('orderid, amountpaid')
                     .in('orderid', orderIds)
                     .range(offset, offset + batchSize - 1);
@@ -642,23 +646,17 @@ class SupabaseBrightpearlService {
                     return {};
                 }
 
-                // Process this batch
                 if (data && data.length > 0) {
                     data.forEach(payment => {
                         const orderId = payment.orderid;
-                        if (!paymentsByOrder[orderId]) {
-                            paymentsByOrder[orderId] = 0;
-                        }
-                        paymentsByOrder[orderId] += parseFloat(payment.amountpaid || 0);
+                        paymentsByOrder[orderId] = parseFloat(payment.amountpaid || 0);
                     });
 
                     totalPaymentsProcessed += data.length;
-                    // Reduced logging - only log if significant batch size
                     if (data.length > 50) {
-                        console.log(`💰 Processed customer payment batch: ${offset + 1}-${offset + data.length} (${data.length} payments)`);
+                        console.log(`💰 Processed payment batch: ${offset + 1}-${offset + data.length} (${data.length} records)`);
                     }
-                    
-                    // Check if we have more data
+
                     hasMoreData = data.length === batchSize;
                     offset += batchSize;
                 } else {
@@ -667,20 +665,19 @@ class SupabaseBrightpearlService {
             }
 
             const ordersWithPayments = Object.keys(paymentsByOrder);
-            console.log(`💰 Loaded customer payment data for ${ordersWithPayments.length} orders (${totalPaymentsProcessed} total payments processed)`);
-            
+            console.log(`💰 Loaded payment data for ${ordersWithPayments.length} orders (${totalPaymentsProcessed} total records processed)`);
+
             if (ordersWithPayments.length > 0) {
                 const nonZeroPayments = ordersWithPayments.filter(orderId => paymentsByOrder[orderId] > 0);
                 console.log(`💰 Found ${nonZeroPayments.length} orders with actual payments`);
-                
-                // Show a few examples of non-zero payments for verification
+
                 if (nonZeroPayments.length > 0) {
                     nonZeroPayments.slice(0, 2).forEach(orderId => {
                         console.log(`   Order ${orderId}: $${paymentsByOrder[orderId].toFixed(2)} paid`);
                     });
                 }
             }
-            
+
             return paymentsByOrder;
 
         } catch (error) {

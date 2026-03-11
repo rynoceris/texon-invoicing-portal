@@ -209,7 +209,38 @@ Since v2.0.1 includes all v2.0.0 features, here's a recap of the major v2.0.0 ad
 
 ---
 
+## Version 2.0.2 - Payment Data Integrity & Sync Fixes (March 2026)
+
+### 💰 Payment Data Accuracy
+- **Fixed incorrect outstanding amounts for orders with payment reversals**: The portal was summing individual payment records from the `customerpayment` table, which double-counted reversed payments as positive amounts. Switched to using the aggregate `payment` table which provides correct net `amountpaid` values that properly account for captures, receipts, and reversals.
+- **Fixed PDF and email payment totals**: Updated `enhanced-pdf-service.js` to use the same corrected payment data source, ensuring invoices and payment reminder emails show accurate amounts.
+
+### 📝 Brightpearl Notes Caching
+- **Fixed notes caching upsert failures (error 42P10)**: The `cached_brightpearl_notes` table was missing a `UNIQUE` constraint on `(order_id, note_id)` required for the upsert operation. Added the constraint and cleaned up 4,121 duplicate note records that had accumulated.
+- **Updated migration SQL** (`add-brightpearl-notes-cache.sql`) to include the unique constraint for future deployments.
+
+### 🛡️ API Rate Limiting
+- **Fixed Brightpearl API rate limit errors during notes caching**: The `enrichNotesWithContactInfo()` function was using `Promise.all()` to fire all contact and staff lookups in parallel, causing burst requests that triggered Brightpearl's rate limiter. Converted to sequential processing with 200ms delays between API calls.
+
+### 🔧 SyncHub Configuration (External)
+- **Enabled 26-week (6-month) trail on Orders table** in SyncHub to catch `orderpaymentstatus` changes that were missed due to Brightpearl Automation's delayed reactive scheduling and transient Supabase/AWS write failures.
+- **Enabled 24-hour trail on Payments table** as a safety net for payment record syncing.
+
+### Files Changed
+- `supabase-brightpearl-service.js` - Switched `getPaymentDataForOrders()` from `customerpayment` to `payment` table
+- `enhanced-pdf-service.js` - Switched `getPaymentData()` to use `payment` table for `totalPaid`
+- `brightpearl-api-client.js` - Sequential contact/staff lookups with rate limiting delays
+- `add-brightpearl-notes-cache.sql` - Added `UNIQUE (order_id, note_id)` constraint
+
+---
+
 ## Version History
+
+### v2.0.2 (March 2026)
+- Fixed payment reversal double-counting by switching to aggregate payment table
+- Fixed notes caching upsert failures with missing unique constraint
+- Fixed Brightpearl API rate limiting in contact enrichment
+- Cleaned up 4,121 duplicate note records
 
 ### v2.0.1 (October 2025)
 - Customer opt-out system with one-click unsubscribe links

@@ -2,19 +2,24 @@
 
 A comprehensive financial operations platform built for Texon Towel. This portal integrates with Brightpearl ERP to manage unpaid invoices, provide advanced analytics, automate contact enrichment, and streamline customer communications with intelligent automation.
 
-## 🎉 Latest Release - v2.0.1
+## 🎉 Latest Release - v2.0.2
 
-**🔧 Minor Release - October 2025:**
+**🔧 Patch Release - March 2026:**
 
-We've completed a **patch release** adding critical **opt-out functionality** and **sender email configuration** to enhance compliance and user control!
+Critical **payment data integrity fixes** and **sync reliability improvements** to ensure accurate outstanding balances and proper Brightpearl notes caching.
 
-### 🚫 New Features
-- **Customer opt-out system** with one-click unsubscribe links in all automated emails
-- **UI-based sender email configuration** eliminating manual database updates
-- **Environment-aware URL generation** for development and production deployments
-- **Dual opt-out verification** ensuring test mode respects customer preferences
+### 💰 Payment Data Fixes
+- **Fixed incorrect outstanding amounts** caused by payment reversals being double-counted as positive payments
+- **Switched payment data source** from `customerpayment` table (individual records) to `payment` table (pre-aggregated net amounts) for accurate reversal handling
+- **Fixed PDF/email payment totals** using the same corrected payment data source
 
-**Previous major release:**
+### 📝 Notes Caching Fixes
+- **Fixed notes upsert failures** by adding missing `UNIQUE (order_id, note_id)` constraint to `cached_brightpearl_notes` table
+- **Cleaned up 4,121 duplicate note records** caused by the missing constraint
+- **Fixed Brightpearl API rate limiting** by converting parallel contact/staff lookups to sequential requests with 200ms delays
+
+**Previous releases:**
+- **v2.0.1** - Opt-out system & sender configuration (October 2025)
 - **v2.0.0** - Comprehensive automated email campaign system (September 2025)
 
 ### 📧 Automated Email Campaigns

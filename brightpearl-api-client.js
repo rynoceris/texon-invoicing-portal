@@ -311,15 +311,16 @@ class BrightpearlApiClient {
         const contactIds = [...new Set(notes.map(note => note.contactId).filter(id => id))];
         const staffIds = [...new Set(notes.map(note => note.addedBy).filter(id => id))];
 
-        // Batch lookup contacts and staff
         const contactLookups = {};
         const staffLookups = {};
+        const DELAY_BETWEEN_LOOKUPS = 200; // 200ms between API calls to avoid rate limits
 
-        // Lookup contacts in batches
+        // Lookup contacts sequentially with delays
         if (contactIds.length > 0) {
             console.log(`👥 Looking up ${contactIds.length} unique contacts...`);
-            const contactPromises = contactIds.map(async (contactId) => {
+            for (const contactId of contactIds) {
                 try {
+                    console.log(`👤 Fetching contact info for ID ${contactId}`);
                     const result = await this.getContact(contactId);
                     if (result.success) {
                         contactLookups[contactId] = result.data;
@@ -327,15 +328,18 @@ class BrightpearlApiClient {
                 } catch (error) {
                     console.warn(`⚠️ Error looking up contact ${contactId}:`, error.message);
                 }
-            });
-            await Promise.all(contactPromises);
+                if (contactIds.length > 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_LOOKUPS));
+                }
+            }
         }
 
-        // Lookup staff members in batches
+        // Lookup staff members sequentially with delays
         if (staffIds.length > 0) {
             console.log(`👨‍💼 Looking up ${staffIds.length} unique staff members...`);
-            const staffPromises = staffIds.map(async (staffId) => {
+            for (const staffId of staffIds) {
                 try {
+                    console.log(`👨‍💼 Fetching staff info for ID ${staffId} (using contact API)`);
                     const result = await this.getStaff(staffId);
                     if (result.success) {
                         staffLookups[staffId] = result.data;
@@ -343,8 +347,10 @@ class BrightpearlApiClient {
                 } catch (error) {
                     console.warn(`⚠️ Error looking up staff ${staffId}:`, error.message);
                 }
-            });
-            await Promise.all(staffPromises);
+                if (staffIds.length > 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_LOOKUPS));
+                }
+            }
         }
 
         // Enrich notes with contact information
@@ -357,7 +363,7 @@ class BrightpearlApiClient {
         }));
 
         console.log(`✅ Enriched notes with contact info (${Object.keys(contactLookups).length} contacts, ${Object.keys(staffLookups).length} staff)`);
-        
+
         return enrichedNotes;
     }
 

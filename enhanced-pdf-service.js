@@ -320,20 +320,30 @@ class EnhancedPDFService {
      */
     async getPaymentData(orderId) {
         try {
-            const { data, error } = await this.supabase
+            // Use the aggregate 'payment' table for the correct net total paid.
+            // This accounts for reversals, unlike summing 'customerpayment' which
+            // double-counts reversed payments as positive amounts.
+            const { data: paymentSummary, error: summaryError } = await this.supabase
+                .from('payment')
+                .select('orderid, amountpaid, amountauthorized, amountcaptured')
+                .eq('orderid', orderId)
+                .single();
+
+            if (summaryError && summaryError.code !== 'PGRST116') { // PGRST116 = no rows
+                console.warn(`⚠️ Could not fetch payment data for order ${orderId}:`, summaryError);
+                return { payments: [], totalPaid: 0 };
+            }
+
+            const totalPaid = parseFloat(paymentSummary?.amountpaid || 0);
+
+            // Also fetch individual payment records for display/detail purposes
+            const { data: paymentDetails } = await this.supabase
                 .from('customerpayment')
                 .select('*')
                 .eq('orderid', orderId);
 
-            if (error) {
-                console.warn(`⚠️ Could not fetch payment data for order ${orderId}:`, error);
-                return { payments: [], totalPaid: 0 };
-            }
-
-            const totalPaid = (data || []).reduce((sum, payment) => sum + (parseFloat(payment.amountpaid) || 0), 0);
-
             return {
-                payments: data || [],
+                payments: paymentDetails || [],
                 totalPaid: totalPaid
             };
         } catch (error) {

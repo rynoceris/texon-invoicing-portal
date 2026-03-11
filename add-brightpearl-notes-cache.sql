@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS cached_brightpearl_notes (
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Unique constraint required for upsert on (order_id, note_id)
+ALTER TABLE cached_brightpearl_notes
+ADD CONSTRAINT unique_order_note UNIQUE (order_id, note_id);
+
 -- Create indexes for fast lookups
 CREATE INDEX IF NOT EXISTS idx_cached_brightpearl_notes_order_id ON cached_brightpearl_notes (order_id);
 CREATE INDEX IF NOT EXISTS idx_cached_brightpearl_notes_created_at ON cached_brightpearl_notes (created_at_brightpearl);
